@@ -67,13 +67,32 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dev dependencies
+      # maturin develop requires a venv (.venv, VIRTUAL_ENV, or CONDA_PREFIX); GHA's setup-python
+      # does not create one, so installs go to the toolcache Python and maturin aborts.
+      - name: Create venv and install dev dependencies
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          set -eux
+          python -m venv .venv
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            VENVP="$GITHUB_WORKSPACE/.venv/Scripts/python.exe"
+            echo "$GITHUB_WORKSPACE/.venv/Scripts" >> "$GITHUB_PATH"
+          else
+            VENVP="$GITHUB_WORKSPACE/.venv/bin/python"
+            echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          fi
+          "$VENVP" -m pip install --upgrade pip
+          "$VENVP" -m pip install -e ".[dev]"
 
       - name: Build Rust extension
-        run: maturin develop --release --manifest-path rust/Cargo.toml
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            PY="$GITHUB_WORKSPACE/.venv/Scripts/python.exe"
+          else
+            PY="$GITHUB_WORKSPACE/.venv/bin/python"
+          fi
+          "$PY" -m maturin develop --release --manifest-path rust/Cargo.toml
 
       - name: Generate fingerprints
         run: python scripts/build_fingerprints.py
@@ -102,14 +121,16 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Rust extension
+      - name: Create venv, install project + maturin, build Rust extension
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install maturin
-          maturin develop --release --manifest-path rust/Cargo.toml
-
-      - name: Install dev deps
-        run: pip install -e ".[dev]"
+          set -eux
+          python -m venv .venv
+          VENVP="$GITHUB_WORKSPACE/.venv/bin/python"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          "$VENVP" -m pip install --upgrade pip
+          "$VENVP" -m pip install -e ".[dev]"
+          "$VENVP" -m maturin develop --release --manifest-path rust/Cargo.toml
 
       - name: Generate fingerprints
         run: python scripts/build_fingerprints.py
