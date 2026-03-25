@@ -63,16 +63,16 @@ def main() -> None:
         fp = build_fingerprint(encoding)
         if fp is not None:
             fingerprints[encoding] = fp
-            print(f"  ✓  {encoding}")
+            print(f"  [ok]  {encoding}")
         else:
             skipped.append(encoding)
             if encoding in _SKIP_EXPLAIN_MULTIBYTE_UNIT:
                 print(
-                    f"  ·  {encoding}  (not used — multibyte UTF-16/32; "
+                    f"  [-]  {encoding}  (not used - multibyte UTF-16/32; "
                     "shortlist uses BOM/null-byte rules, not this table)"
                 )
             else:
-                print(f"  ✗  {encoding}  (skipped — no valid single-byte decodings)")
+                print(f"  [--]  {encoding}  (skipped - no valid single-byte decodings)")
 
     lines = [
         '"""',
@@ -92,7 +92,7 @@ def main() -> None:
     out_file = out_dir / "fingerprints.py"
     out_file.write_text("\n".join(lines), encoding="utf-8")
 
-    print(f"\n✓ Wrote {len(fingerprints)} fingerprints to {out_file}")
+    print(f"\nOK: wrote {len(fingerprints)} fingerprints to {out_file}")
     mb = [x for x in skipped if x in _SKIP_EXPLAIN_MULTIBYTE_UNIT]
     other = [x for x in skipped if x not in _SKIP_EXPLAIN_MULTIBYTE_UNIT]
     if mb:

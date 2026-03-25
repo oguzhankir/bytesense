@@ -65,10 +65,10 @@ def main() -> None:
         except urllib.error.URLError as e:
             print(
                 "\nHTTPS fetch failed. Try one of:\n"
-                "  • Use project venv:  .venv/bin/python scripts/fetch_cn_benchmark_samples.py\n"
-                "  • Install CA bundle: pip install certifi\n"
-                "  • macOS Python.org: run /Applications/Python\\ 3.*/Install\\ Certificates.command\n"
-                "  • Last resort:       python scripts/fetch_cn_benchmark_samples.py --insecure\n",
+                "  - Use project venv:  .venv/bin/python scripts/fetch_cn_benchmark_samples.py\n"
+                "  - Install CA bundle: pip install certifi\n"
+                "  - macOS Python.org: run /Applications/Python\\ 3.*/Install\\ Certificates.command\n"
+                "  - Last resort:       python scripts/fetch_cn_benchmark_samples.py --insecure\n",
                 file=sys.stderr,
             )
             raise SystemExit(1) from e
