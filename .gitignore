@@ -191,6 +191,43 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Local benchmark JSON output
+benchmarks/results/
+
+# Downloaded charset-normalizer corpus (re-fetch: scripts/fetch_cn_benchmark_samples.py)
+benchmarks/data/cn_official/
+
+# macOS / Windows junk
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors / IDEs (local only)
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Local env overrides (keep .env ignored above; explicit variants)
+.env.*
+!.env.example
+
+# Local wheel dirs (if you build wheels in-repo)
+wheels/
+
+# Backup / temp
+*.bak
+*.tmp
+*~
+.#*
+
+# Profiling
+*.prof
+*.pstats
+
 # PyPI configuration file
 .pypirc
 

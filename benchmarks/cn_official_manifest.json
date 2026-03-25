@@ -1,0 +1,27 @@
+{
+  "source_repo": "https://github.com/jawah/charset_normalizer",
+  "source_path": "data/",
+  "reference_test": "tests/test_full_detection.py",
+  "notice": "Sample files originate from charset-normalizer data/ (see upstream data/NOTICE.md). Used only for benchmark comparison.",
+  "base_url": "https://raw.githubusercontent.com/jawah/charset_normalizer/master/data/",
+  "files": [
+    {"file": "sample-arabic-1.txt", "encoding": "cp1256"},
+    {"file": "sample-french-1.txt", "encoding": "cp1252"},
+    {"file": "sample-arabic.txt", "encoding": "utf_8"},
+    {"file": "sample-russian-3.txt", "encoding": "utf_8"},
+    {"file": "sample-french.txt", "encoding": "utf_8"},
+    {"file": "sample-chinese.txt", "encoding": "big5"},
+    {"file": "sample-greek.txt", "encoding": "cp1253"},
+    {"file": "sample-greek-2.txt", "encoding": "cp1253"},
+    {"file": "sample-hebrew-2.txt", "encoding": "cp1255"},
+    {"file": "sample-hebrew-3.txt", "encoding": "cp1255"},
+    {"file": "sample-bulgarian.txt", "encoding": "utf_8"},
+    {"file": "sample-english.bom.txt", "encoding": "utf_8"},
+    {"file": "sample-spanish.txt", "encoding": "utf_8"},
+    {"file": "sample-korean.txt", "encoding": "cp949"},
+    {"file": "sample-turkish.txt", "encoding": "cp1254"},
+    {"file": "sample-russian-2.txt", "encoding": "utf_8"},
+    {"file": "sample-russian.txt", "encoding": "mac_cyrillic"},
+    {"file": "sample-polish.txt", "encoding": "utf_8"}
+  ]
+}
