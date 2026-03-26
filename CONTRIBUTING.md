@@ -15,7 +15,7 @@ python scripts/build_fingerprints.py
 
 - `ruff check src/ tests/ benchmarks/`
 - `mypy src/bytesense`
-- `pytest tests/ -v --cov=bytesense`
+- `pytest tests/ -v --cov=bytesense` (must satisfy `fail_under` in `pyproject.toml`)
 - `python scripts/fetch_cn_benchmark_samples.py` (for full benchmark parity with charset-normalizer’s `data/`)
 - `pytest benchmarks/test_bench_detection.py -k accuracy -v`
 

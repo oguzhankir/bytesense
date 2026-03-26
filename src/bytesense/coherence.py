@@ -50,6 +50,22 @@ def coherence_score(text: str, language: str) -> float:
     return min(score / total_weight, 1.0)
 
 
+def _detect_language_uncached(text: str, threshold: float) -> List[Tuple[str, float]]:
+    languages = list(CHAR_FREQUENCIES.keys())
+    results: List[Tuple[str, float]] = []
+    for lang in languages:
+        score = coherence_score(text, lang)
+        if score >= threshold:
+            results.append((lang, score))
+    return sorted(results, key=lambda x: x[1], reverse=True)
+
+
+@lru_cache(maxsize=512)
+def _cached_detect_language(text: str, threshold: float) -> tuple[tuple[str, float], ...]:
+    """Cached version — convert list to tuple for hashability."""
+    return tuple(_detect_language_uncached(text, threshold))
+
+
 def detect_language(
     text: str,
     candidates: Optional[List[str]] = None,
@@ -66,10 +82,12 @@ def detect_language(
     Returns:
         List of (language, score) sorted by score descending.
     """
-    languages = candidates if candidates is not None else list(CHAR_FREQUENCIES.keys())
-    results: List[Tuple[str, float]] = []
-    for lang in languages:
-        score = coherence_score(text, lang)
-        if score >= threshold:
-            results.append((lang, score))
-    return sorted(results, key=lambda x: x[1], reverse=True)
+    if candidates is not None:
+        languages = candidates
+        results = [(lang, coherence_score(text, lang)) for lang in languages]
+        return sorted(
+            [(lang, score) for lang, score in results if score >= threshold],
+            key=lambda x: x[1],
+            reverse=True,
+        )
+    return list(_cached_detect_language(text, threshold))

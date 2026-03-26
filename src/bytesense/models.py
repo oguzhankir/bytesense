@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+_SLOTS_KW = {"slots": True} if sys.version_info >= (3, 10) else {}
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, **_SLOTS_KW)
 class EncodingAlternative:
     """A plausible alternative encoding that did not win."""
 
@@ -20,7 +23,7 @@ class EncodingAlternative:
         }
 
 
-@dataclass
+@dataclass(**_SLOTS_KW)
 class DetectionResult:
     """
     Full result object returned by all bytesense detection functions.

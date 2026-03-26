@@ -165,7 +165,8 @@ SIMILAR_ENCODINGS: dict[str, list[str]] = {
     "euc_jp": ["iso2022_jp", "iso2022_jp_2", "euc_jis_2004"],
     "shift_jis": ["cp932", "shift_jis_2004", "shift_jisx0213"],
     "euc_kr": ["iso2022_kr", "johab", "cp949"],
-    "gb2312": ["gbk", "gb18030", "hz"],
+    # gb2312 strict decode can fail while gbk/gb18030 still succeed — do not skip those.
+    "gb2312": ["hz"],
     "big5": ["big5hkscs", "cp950"],
     "iso8859_11": ["tis_620"],
     "mac_roman": ["mac_iceland", "mac_turkish"],

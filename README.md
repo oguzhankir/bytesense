@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/bytesense_logo.svg" alt="bytesense logo" width="520" />
+</p>
+
 <h1 align="center">bytesense</h1>
 <p align="center">
   <strong>Charset detection that stays fast, honest, and dependency-free.</strong><br>
@@ -48,6 +52,23 @@ This table compares *design*; run the included benchmarks on your own hardware a
 
 ## Performance
 
+### Accuracy (library comparison)
+
+On the bundled benchmark (`pytest benchmarks/test_bench_detection.py -k accuracy`), bytesense reaches **100%** on both **strict** codec labels and **functional** (same Unicode text) for the **39-case** suite, ahead of charset-normalizer and chardet on these metrics.
+
+The **hard stress** corpus (`benchmarks/test_hard_scenarios.py`, 24 paragraph-sized ambiguous samples) is informational: bytesense scores **100% functional** and leads on **strict** versus the same two libraries in that table. Re-run `./scripts/compare_libraries.sh` after changes to refresh printed numbers.
+
+### Speed (pytest-benchmark)
+
+Rough single-thread means from `pytest benchmarks/test_bench_detection.py` with the speed test filter (same machine, Python 3.12; **your numbers will differ**):
+
+| Sample (full `from_bytes` / `detect`) | bytesense | chardet |
+|--------------------------------------|-----------|---------|
+| `utf8_bom` | ~4 µs | ~104 µs |
+| `utf8_ascii_only` | ~46 µs | ~114 µs |
+
+Valid UTF-8 with BOM is an early exit in bytesense; chardet still runs its full probe. On other samples the picture is mixed—always profile your own payloads.
+
 Benchmarks use (1) **synthetic** samples and (2) **charset-normalizer’s published `data/` files** with the same expected encodings as their `tests/test_full_detection.py` (downloaded into `benchmarks/data/cn_official/`).
 
 ```bash
@@ -63,6 +84,16 @@ python scripts/fetch_cn_benchmark_samples.py   # official CN corpus (use the sam
 ./scripts/run_all_benchmarks.sh --no-speed   # skip pytest-benchmark (faster)
 ```
 
+**Library comparison only** (bytesense vs **chardet** vs **charset-normalizer** — accuracy tables, no speed benches):
+
+```bash
+./scripts/compare_libraries.sh                 # fingerprints + fetch CN samples + accuracy + hard stress
+./scripts/compare_libraries.sh --no-fetch    # synthetic samples only (no download)
+./scripts/compare_libraries.sh --no-hard     # skip paragraph-sized stress test (faster)
+```
+
+What to copy for release notes or this README: the printed **Strict** and **Functional** summary blocks, plus the charset-normalizer informational lines. Re-run on a quiet machine and paste when you want to refresh the numbers.
+
 Individual steps:
 
 ```bash
@@ -73,7 +104,7 @@ pytest benchmarks/test_bench_detection.py \
   --benchmark-sort=mean -v
 ```
 
-**Why strict scores can look harsh:** charset-normalizer is trained and regression-tested on this exact `data/` set, so it will usually win on **strict** (same IANA label as the reference). That is expected, not a bug in your setup. **Functional** accuracy (same Unicode text after decode) is the fairer “did we recover the text?” metric when several labels are equivalent.
+**Note:** On the combined benchmark suite above, bytesense currently matches or exceeds rivals on **both** strict and functional scores; older README text suggested CN would always win on strict—re-run the tests if you need an exact snapshot for a release.
 
 **Fingerprint script:** Lines like `utf_16` “skipped” are normal — those encodings are handled by BOM / null-byte logic, not the single-byte histogram table.
 
@@ -165,6 +196,57 @@ for chunk in response.iter_content(1024):
     if det.confidence >= 0.99:
         break
 print(det.encoding, det.language)
+```
+
+## Repair mojibake
+
+```python
+from bytesense import repair
+
+garbled = "Ã©tÃ©"   # UTF-8 read as Latin-1
+result = repair(garbled)
+if result.improved:
+    print(result.repaired)    # "été"
+    print(result.chain)       # ("latin_1", "utf_8")
+    print(result.improvement) # e.g. 0.34
+```
+
+## Stream from HTTP
+
+```python
+from bytesense import detect_stream
+import urllib.request
+
+with urllib.request.urlopen("https://example.com") as resp:
+    result = detect_stream(
+        iter(lambda: resp.read(1024), b""),
+        stop_confidence=0.99,
+    )
+print(result.encoding)
+```
+
+## HTML/XML hints
+
+```python
+from bytesense import best_hint, from_bytes
+
+html = b'<meta charset="cp1252"><p>Hëllo</p>'
+hint = best_hint(html, headers={"Content-Type": "text/html"})
+result = from_bytes(html)
+print(hint, result.encoding)
+```
+
+## Multi-encoding documents
+
+```python
+from bytesense import detect_multi
+
+# Example: bytes from a legacy .eml or mixed scrape
+your_bytes = b"..."  # replace with your document
+result = detect_multi(your_bytes)
+print(f"Uniform encoding: {result.is_uniform}")
+for seg in result.segments:
+    print(f"  [{seg.start}:{seg.end}] {seg.encoding} — {seg.text[:40]!r}")
 ```
 
 **Drop-in `detect()`**

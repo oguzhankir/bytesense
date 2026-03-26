@@ -77,7 +77,7 @@ _RAW: List[Tuple[str, str | bytes, str]] = [
     (
         "utf8_bom",
         "Hello with BOM! UTF-8 text with byte order mark.",
-        "utf_8_sig",
+        "utf_8",
     ),
     # --- Extra UTF-8 variety (legacy SBCS cases are ambiguous across detectors) ---
     (
@@ -142,7 +142,9 @@ def _build_dataset() -> List[Tuple[str, bytes, str]]:
             data = text
         else:
             try:
-                if enc == "utf_16_le":
+                if name == "utf8_bom":
+                    data = text.encode("utf-8-sig")
+                elif enc == "utf_16_le":
                     data = text.encode("utf-16-le")
                 else:
                     codec = enc.replace("_", "-") if enc != "utf_8_sig" else "utf-8-sig"

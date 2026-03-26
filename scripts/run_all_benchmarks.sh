@@ -53,6 +53,9 @@ banner "1/3 — Accuracy gates + three-way summary (test_bench_detection, -k acc
 banner "2/3 — Hard stress corpus (test_hard_scenarios)"
 "$PY" -m pytest benchmarks/test_hard_scenarios.py -v -s
 
+banner "2.5/3 — Repair engine quick sanity"
+"$PY" -m pytest tests/test_repair.py -v --tb=short
+
 # Note: -k bench_ matches the *module* name test_bench_detection.py — do not use it.
 BENCH_KW="test_bench_bytesense_fast_path or test_bench_cn_fast_path or test_bench_bytesense_full or test_bench_cn_full or test_bench_chardet_full"
 

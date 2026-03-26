@@ -19,6 +19,7 @@ from .fingerprint import (
     shortlist_encodings,
     utf8_continuation_score,
 )
+from .heuristics import reorder_candidates
 
 
 def _looks_like_iso2022_bytes(data: bytes) -> bool:
@@ -191,9 +192,9 @@ class CandidateSelector:
                 seen.add(enc)
                 final.append(enc)
 
-        # Cap decode attempts for speed. The SBCS/CJK ``preferred`` prefix is ~28 encodings
-        # before ``shift_jis`` / ``euc_jp`` / ``cp949``; slicing below that breaks benchmarks.
-        return final[:28] if final else ALL_ENCODINGS[:28]
+        final = reorder_candidates(self.data, final)
+
+        return final[:40] if final else ALL_ENCODINGS[:40]
 
     def exclude_similar_to_failed(
         self,

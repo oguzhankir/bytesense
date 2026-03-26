@@ -44,15 +44,16 @@ jobs:
         run: mypy src/bytesense
 
       - name: Unit tests + coverage
-        run: pytest tests/ -v --cov=bytesense --cov-report=xml
+        run: pytest tests/ -v --cov=bytesense --cov-branch --cov-report=xml
 
       - name: Accuracy benchmarks (must pass)
         run: pytest benchmarks/test_bench_detection.py -k accuracy -v --no-header
 
-      - name: Upload coverage
+      - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
 
   test-with-rust:
