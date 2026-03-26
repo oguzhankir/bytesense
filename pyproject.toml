@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "bytesense"
-version = "0.1.1"
+version = "0.1.2"
 description = "Fast, accurate charset/encoding detection. Zero ML. Zero dependencies. Optional Rust acceleration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -124,7 +124,8 @@ omit = ["*/data/fingerprints.py"]
 
 [tool.coverage.report]
 # Total includes large api.py surface; optional Rust tests are often skipped locally.
-fail_under = 50
+# Measured ~75% on `pytest tests/`; raise toward 85% as more of api.py / fingerprint are covered.
+fail_under = 75
 exclude_lines = [
   "pragma: no cover",
   "if TYPE_CHECKING:",

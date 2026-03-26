@@ -7,14 +7,17 @@ Useful for legacy email with mixed encodings or multi-part documents.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional
 
 from .api import from_bytes
 from .models import DetectionResult
 
+_SLOTS_KW = {"slots": True} if sys.version_info >= (3, 10) else {}
 
-@dataclass
+
+@dataclass(**_SLOTS_KW)
 class DocumentSegment:
     """A contiguous segment of bytes with a detected encoding."""
 
@@ -44,7 +47,7 @@ class DocumentSegment:
         }
 
 
-@dataclass
+@dataclass(**_SLOTS_KW)
 class MultiEncodingResult:
     """Result of multi-encoding document analysis."""
 
@@ -121,10 +124,9 @@ def detect_multi(
                 and result.confidence >= merge_threshold
                 and cur_result.confidence >= merge_threshold
             ):
-                # Extend current segment
                 cur_end = end
-                # Re-detect on the merged range for a better result
-                cur_result = from_bytes(data[cur_start:cur_end])
+                merged_len = cur_end - cur_start
+                cur_result = replace(cur_result, byte_count=merged_len)
             else:
                 merged.append(
                     DocumentSegment(

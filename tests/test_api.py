@@ -33,7 +33,7 @@ class TestFromBytes:
     def test_utf8_bom(self) -> None:
         data = b"\xef\xbb\xbf" + b"Hello!"
         r = from_bytes(data)
-        assert r.encoding == "utf_8"
+        assert r.encoding == "utf_8_sig"
         assert r.bom_detected is True
         assert r.confidence == 1.0
 

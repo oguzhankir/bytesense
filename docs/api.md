@@ -4,6 +4,8 @@
 
 Main entry point for raw `bytes` / `bytearray`. Returns a `DetectionResult` with `encoding`, `confidence`, `language`, `why`, and related fields.
 
+UTF-8 with a BOM is reported as **`utf_8_sig`** (the codec name used for that prefix), with `bom_detected=True`.
+
 ## `from_path(path, ...) -> DetectionResult`
 
 Reads a file and runs detection.

@@ -56,7 +56,7 @@ Same idea as the [charset-normalizer README](https://github.com/Ousret/charset_n
 | Detect spoken language | ✅ | ✅ | ✅ |
 | Explainable detection (`why`) | Partial | Rich metadata | **Yes** (always) |
 | Streaming-first API | Limited | Via API patterns | **`StreamDetector`** |
-| Wheel size (typical) | ~500 kB | ~150 kB | Small (pure Python + tables) |
+| Source / wheel size (typical) | ~500 kB | ~150 kB | **~45 kB** sdist (pure Python + tables; platform wheels add Rust binary) |
 | Custom codecs via stdlib registration | ❌ | ✅ | ✅ (same `codecs` model) |
 
 ¹ *Universal* in the charset-normalizer sense: coverage follows **what your Python build exposes through `codecs`** as decode candidates—not a fixed “99 encodings” count on every platform.

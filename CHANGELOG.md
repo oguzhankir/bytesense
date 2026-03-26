@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.2] — 2025-03-26
+
+### Changed
+
+- **BOM fast path:** UTF-8 with BOM now reports `encoding="utf_8_sig"` (aligned with `codecs` / `CandidateSelector`), not `utf_8`.
+- **Streaming:** In-band HTML/XML hints are probed on every `feed()` until a hint is found (scan limited to the first 4KB inside `_probe_inband_hint`); shared regex patterns imported from `hints.py`; `codecs` imported at module level.
+- **`detect_multi`:** Adjacent same-encoding merges no longer re-run `from_bytes` on the full merged span; `byte_count` on the shared `DetectionResult` is updated with `dataclasses.replace`.
+- **`repair_bytes`:** Explicit `max_iterations` and `chains` parameters instead of `**kwargs: object`.
+- **Coverage:** `fail_under` raised from 50 to **75** (current suite ~75%; 85% remains a stretch goal with more `api` / fingerprint tests).
+
+### Fixed
+
+- `DocumentSegment` / `MultiEncodingResult` now use `slots` on Python 3.10+ like other dataclasses in the package.
+
 ## [0.1.1] — 2025-03-26
 
 ### Added

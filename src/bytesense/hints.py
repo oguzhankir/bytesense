@@ -6,6 +6,7 @@ for callers who already have the raw content and headers.
 """
 from __future__ import annotations
 
+import codecs
 import re
 from typing import Optional
 
@@ -24,8 +25,6 @@ _HTTP_HEADER_RE = re.compile(
 
 
 def _normalise(enc_str: str) -> Optional[str]:
-    import codecs
-
     try:
         return codecs.lookup(enc_str.strip()).name.replace("-", "_")
     except LookupError:

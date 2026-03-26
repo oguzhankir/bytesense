@@ -214,7 +214,9 @@ def repair(
 def repair_bytes(
     data: bytes,
     encoding: Optional[str] = None,
-    **kwargs: object,
+    *,
+    max_iterations: int = 2,
+    chains: Optional[List[tuple[str, str]]] = None,
 ) -> RepairResult:
     """
     Repair mojibake in a byte sequence.
@@ -223,9 +225,10 @@ def repair_bytes(
     then applies text-level repair.
 
     Args:
-        data:     Byte sequence to repair.
-        encoding: Known encoding. If None, auto-detected via ``from_bytes``.
-        **kwargs: Forwarded to ``repair()``.
+        data:             Byte sequence to repair.
+        encoding:         Known encoding. If None, auto-detected via ``from_bytes``.
+        max_iterations:   Forwarded to :func:`repair`.
+        chains:           Forwarded to :func:`repair`.
 
     Returns:
         :class:`RepairResult`
@@ -243,7 +246,7 @@ def repair_bytes(
     except LookupError:
         text = data.decode("utf_8", errors="replace")
 
-    return repair(text, **kwargs)  # type: ignore[arg-type]
+    return repair(text, max_iterations=max_iterations, chains=chains)
 
 
 def is_mojibake(text: str, threshold: float = 0.15) -> bool:

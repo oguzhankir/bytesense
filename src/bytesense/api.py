@@ -530,16 +530,15 @@ def from_bytes(
             langs = detect_language(sample, threshold=language_threshold)
             lang = langs[0][0] if langs else ""
             coh = langs[0][1] if langs else 0.0
-            # Report utf_8 for UTF-8 BOM (common benchmark / interchange label).
-            report_enc = "utf_8" if bom_enc == "utf_8_sig" else bom_enc
+            # Use the BOM codec name (utf_8_sig for UTF-8 BOM) — matches CandidateSelector / codecs.
             return _make_result(
-                report_enc,
+                bom_enc,
                 0.0,
                 coh,
                 lang,
                 True,
                 [],
-                f"BOM/SIG detected ({bom_enc!r}) — reporting as {report_enc!r}.",
+                f"BOM/SIG detected — codec {bom_enc!r}.",
                 byte_count,
                 confidence=1.0,
             )

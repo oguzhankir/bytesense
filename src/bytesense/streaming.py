@@ -9,22 +9,12 @@ Key improvements over v1:
 """
 from __future__ import annotations
 
-import re
+import codecs
 from typing import Dict, Iterator, Optional
 
 from .api import from_bytes
+from .hints import _HTML_META_RE, _HTTP_EQUIV_RE, _XML_DECL_RE
 from .models import DetectionResult
-
-# Regex patterns for in-band encoding declarations
-_XML_DECL_RE = re.compile(rb'<\?xml[^>]*encoding=["\']([^"\']+)["\']', re.IGNORECASE)
-_HTML_META_RE = re.compile(
-    rb'<meta[^>]+charset\s*=\s*["\']?\s*([a-zA-Z0-9_\-]+)', re.IGNORECASE
-)
-_HTTP_EQUIV_RE = re.compile(
-    rb'<meta[^>]+http-equiv\s*=\s*["\']?content-type["\']?[^>]*'
-    rb'content\s*=\s*["\']?[^"\']*charset=([a-zA-Z0-9_\-]+)',
-    re.IGNORECASE,
-)
 
 
 class StreamDetector:
@@ -81,8 +71,8 @@ class StreamDetector:
         self._buf.extend(chunk)
         buf_len = len(self._buf)
 
-        # Probe for in-band encoding declaration in the first 4KB
-        if buf_len <= 4096 and not self._declared_hint:
+        # Probe first 4KB for in-band hints (same limit as hint_from_content); any feed size.
+        if not self._declared_hint:
             self._probe_inband_hint()
 
         if buf_len >= self.MIN_BYTES:
@@ -97,8 +87,6 @@ class StreamDetector:
             if m:
                 try:
                     declared = m.group(1).decode("ascii", errors="ignore").strip()
-                    import codecs
-
                     norm = codecs.lookup(declared).name.replace("-", "_")
                     self._declared_hint = norm
                 except (LookupError, UnicodeDecodeError):
@@ -114,8 +102,6 @@ class StreamDetector:
         # Apply in-band hint: boost confidence when declared matches detected
         if self._declared_hint and self._result and self._result.encoding:
             try:
-                import codecs
-
                 if codecs.lookup(self._declared_hint).name == codecs.lookup(self._result.encoding).name:
                     boosted = min(1.0, self._result.confidence + 0.06)
                     self._result = DetectionResult(
@@ -168,8 +154,6 @@ class StreamDetector:
         if not declared:
             return
         try:
-            import codecs
-
             norm = codecs.lookup(declared).name.replace("-", "_")
             self._declared_hint = norm
             if self._result and self._result.encoding:
