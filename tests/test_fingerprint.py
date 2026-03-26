@@ -98,3 +98,58 @@ def test_cosine_similarity_orthogonal() -> None:
 def test_histogram_to_ratios_empty() -> None:
     h = byte_histogram(b"")
     assert histogram_to_ratios(h, 0) == [0.0] * 256
+
+
+def test_histogram_eight_byte_loop() -> None:
+    """Exercise the 8-byte unrolled loop in byte_histogram."""
+    payload = bytes(range(16))
+    h = byte_histogram(payload)
+    assert sum(h) == 16
+
+
+def test_histogram_to_ratios_nonempty() -> None:
+    h = byte_histogram(b"abc")
+    ratios = histogram_to_ratios(h, 3)
+    assert len(ratios) == 256
+    assert pytest.approx(sum(ratios), rel=1e-6) == 1.0
+
+
+def test_high_byte_ratio_zero_total() -> None:
+    h = byte_histogram(b"")
+    assert high_byte_ratio(h, 0) == 0.0
+
+
+def test_null_byte_ratio_zero_total() -> None:
+    h = byte_histogram(b"")
+    assert null_byte_ratio(h, 0) == 0.0
+
+
+def test_cp1252_zone_ratio_cp1252_bytes() -> None:
+    data = bytes(range(0x80, 0xA0)) * 4
+    h = byte_histogram(data)
+    r = cp1252_zone_ratio(h, len(data))
+    assert r > 0.4
+
+
+def test_utf8_continuation_invalid_leading_byte() -> None:
+    score = utf8_continuation_score(b"\xff\x80\x80\x80")
+    assert 0.0 <= score <= 1.0
+
+
+def test_detect_null_pattern_utf32_be() -> None:
+    # Minimal repeating UTF-32-BE-like pattern (ASCII in UTF-32 BE)
+    chunk = b"\x00\x00\x00A"
+    data = chunk * 30
+    assert detect_null_pattern(data) == "utf_32_be"
+
+
+def test_detect_null_pattern_utf32_le() -> None:
+    chunk = b"A\x00\x00\x00"
+    data = chunk * 30
+    assert detect_null_pattern(data) == "utf_32_le"
+
+
+def test_detect_null_pattern_utf16_be() -> None:
+    chunk = b"\x00A"
+    data = chunk * 40
+    assert detect_null_pattern(data) == "utf_16_be"

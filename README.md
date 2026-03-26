@@ -81,18 +81,23 @@ Numbers below are from the same **`./scripts/compare_libraries.sh`** run the CI 
 | charset-normalizer | 41.7% (10/24) | 58.3% (14/24) |
 | chardet | 70.8% (17/24) | 91.7% (22/24) |
 
-*Updated March 2026 — CPython 3.12, chardet 7.x, charset-normalizer 3.4.x, bytesense 0.1.0. Your CPU and dependency versions will differ; re-run `./scripts/compare_libraries.sh` to refresh.*
+*Updated March 2026 — CPython 3.12, chardet 7.x, charset-normalizer 3.4.x, bytesense 0.1.x. Your CPU and dependency versions will differ; re-run `./scripts/compare_libraries.sh` to refresh.*
 
-### Speed (pytest-benchmark, same machine snapshot)
+### Speed (pytest-benchmark)
 
-Rough single-thread means (`pytest benchmarks/test_bench_detection.py`, speed filter; **your numbers will differ**):
+Same harness as the accuracy suite (`benchmarks/test_bench_detection.py`): **bytesense** `from_bytes` vs **chardet** `detect` on identical bytes. Times are **mean per call (µs)** from a single machine (CPython 3.12); **your numbers will differ** — see [charset-normalizer’s performance section](https://github.com/Ousret/charset_normalizer#-performance) and [chardet 7’s README](https://github.com/chardet/chardet) for their published tables.
 
-| Sample (`from_bytes` / `detect`) | bytesense | chardet |
-|----------------------------------|-----------|---------|
-| `utf8_bom` | ~4 µs | ~104 µs |
-| `utf8_ascii_only` | ~46 µs | ~114 µs |
+| Sample | bytesense mean (µs) | chardet mean (µs) | Notes |
+|--------|--------------------:|------------------:|-------|
+| `utf8_bom` | ~8 | ~170 | BOM fast path vs chardet full scan |
+| `utf8_portuguese` (fast-path bench) | ~8 | — | Very small UTF-8 payload |
+| `utf8_ascii_only` (full detection) | ~70 | — | Non-ASCII sentinel byte avoids pure-ASCII shortcut |
+| `utf8_english_unicode` | ~64 | — | Latin + a few extended chars |
+| `large_utf8_1mb` | ~4,100 | ~1,300 | **Workload-dependent** — on this run chardet was faster on the 1 MB buffer; always profile your own file sizes |
 
-UTF-8 with BOM is an early exit in bytesense; chardet still runs its full probe. Profile your own payloads.
+**charset-normalizer** is exercised in the same file (`test_bench_cn_*` / `charset_normalizer.from_bytes`); install `[dev]` and run the benchmark group to print side-by-side timings for your CPU.
+
+UTF-8 with BOM is an early path in bytesense; chardet still runs a heavier probe on many builds.
 
 ### How to reproduce
 
