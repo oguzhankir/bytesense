@@ -2,6 +2,8 @@
 
 Thanks for your interest in **bytesense**.
 
+By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Setup
 
 ```bash
@@ -10,6 +12,16 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 python scripts/build_fingerprints.py
 ```
+
+## Documentation (MkDocs)
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve          # local preview
+mkdocs build --strict # writes site/
+```
+
+The **Docs Pages** workflow ([`.github/workflows/docs.yml`](.github/workflows/docs.yml)) deploys to GitHub Pages on pushes to `main`. In the repository **Settings → Pages**, set **Source** to **GitHub Actions** if it is not already.
 
 ## Checks before a PR
 

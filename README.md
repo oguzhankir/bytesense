@@ -1,5 +1,6 @@
 <p align="center">
-  <img src="assets/bytesense_logo.svg" alt="bytesense logo" width="520" />
+  <!-- PyPI renders README from the sdist; use absolute URL so the logo loads on pypi.org -->
+  <img src="https://raw.githubusercontent.com/oguzhankir/bytesense/main/assets/bytesense_logo.svg" alt="bytesense logo" width="520" />
 </p>
 
 <p align="center">
@@ -22,10 +23,13 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" />
   </a>
+  <a href="https://oguzhankir.github.io/bytesense/">
+    <img src="https://img.shields.io/badge/docs-GitHub%20Pages-526cfe?logo=githubpages&logoColor=white" alt="Documentation" />
+  </a>
 </p>
 
 <p align="center">
-  <sub>Author: <strong>Oğuzhan Kır</strong> · <a href="https://github.com/oguzhankir/bytesense">GitHub</a> · <a href="docs/">Docs</a></sub>
+  <sub>Author: <strong>Oğuzhan Kır</strong> · <a href="https://github.com/oguzhankir/bytesense">GitHub</a> · <a href="https://oguzhankir.github.io/bytesense/">Documentation</a></sub>
 </p>
 
 ---
@@ -244,7 +248,7 @@ from bytesense import detect
 print(detect(b"hello"))  # {"encoding", "confidence", "language"}
 ```
 
-More detail: [docs/api.md](docs/api.md) · [docs/quickstart.md](docs/quickstart.md)
+More detail: **[MkDocs site](https://oguzhankir.github.io/bytesense/)** · [API](https://oguzhankir.github.io/bytesense/api/) · [Quick start](https://oguzhankir.github.io/bytesense/quickstart/) · [Examples](https://oguzhankir.github.io/bytesense/examples/)
 
 ## Why bytesense
 

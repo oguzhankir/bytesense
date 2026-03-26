@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.1] — 2025-03-26
+
+### Added
+
+- `examples/` scripts (basic detection, `detect()`, streaming, repair, HTTP hints, multi-encoding)
+- MkDocs documentation site and GitHub Actions workflow **Docs Pages** → [GitHub Pages](https://oguzhankir.github.io/bytesense/)
+- `[project.optional-dependencies]` group `docs` (`mkdocs`, `mkdocs-material`, `pymdown-extensions`)
+- `project.urls.Documentation` in `pyproject.toml`
+
+### Fixed
+
+- README logo on PyPI: use `raw.githubusercontent.com` URL (sdist has no `assets/` for the image)
+- Source distribution: include `LICENSE` in maturin `include` so PyPI accepts `License-File` metadata
+
 ## [0.1.0] — 2025-03-26
 
 First published release.

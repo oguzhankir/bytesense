@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "bytesense"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fast, accurate charset/encoding detection. Zero ML. Zero dependencies. Optional Rust acceleration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -50,6 +50,11 @@ dependencies = []
 [project.optional-dependencies]
 # Native acceleration is in platform wheels built with maturin; no extra Python deps to list here.
 fast = []
+docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "pymdown-extensions>=10.0",
+]
 dev = [
   "pytest>=8.0",
   "pytest-cov>=5.0",
@@ -71,7 +76,8 @@ bytesense = "bytesense.cli:main"
 Homepage    = "https://github.com/oguzhankir/bytesense"
 Repository  = "https://github.com/oguzhankir/bytesense"
 Issues      = "https://github.com/oguzhankir/bytesense/issues"
-Changelog   = "https://github.com/oguzhankir/bytesense/blob/main/CHANGELOG.md"
+Changelog     = "https://github.com/oguzhankir/bytesense/blob/main/CHANGELOG.md"
+Documentation = "https://oguzhankir.github.io/bytesense/"
 
 [tool.maturin]
 manifest-path = "rust/Cargo.toml"

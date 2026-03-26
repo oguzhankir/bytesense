@@ -1,0 +1,60 @@
+site_name: bytesense
+site_description: Charset detection without runtime dependencies — optional Rust acceleration.
+site_author: Oğuzhan Kır
+site_url: https://oguzhankir.github.io/bytesense/
+
+repo_name: bytesense
+repo_url: https://github.com/oguzhankir/bytesense
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/bytesense_logo.svg
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Quick start: quickstart.md
+  - Examples: examples.md
+  - API reference: api.md
+  - Benchmarks: benchmarks.md
+  - Changelog: changelog.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  pymdownx.snippets:
+    base_path: ["."]
+  pymdownx.highlight:
+    anchor_linenums: true
+  pymdownx.superfences:
+  pymdownx.inlinehilite:
+  pymdownx.details:
+  admonition:
+  toc:
+    permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/oguzhankir/bytesense
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/bytesense/
