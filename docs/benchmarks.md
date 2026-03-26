@@ -1,6 +1,6 @@
 # Benchmarks
 
-Accuracy and speed checks live under `benchmarks/`. For a **human-readable speed table** (bytesense vs chardet, representative µs means) and how to interpret workload-dependent cases (e.g. large UTF-8 buffers), see the **Speed (pytest-benchmark)** section in the [project README](../README.md#speed-pytest-benchmark).
+Accuracy and speed checks live under `benchmarks/`. For a **human-readable speed table** (bytesense vs chardet, representative µs means) and how to interpret workload-dependent cases (e.g. large UTF-8 buffers), see the **Speed (pytest-benchmark)** section in the [project README on GitHub](https://github.com/oguzhankir/bytesense/blob/main/README.md#speed-pytest-benchmark) (MkDocs does not ship the repo root `README.md`, so this link targets the repository file).
 
 Run accuracy gate (must pass):
 

@@ -5,7 +5,9 @@ import array
 import pytest
 
 from bytesense.fingerprint import (
+    _byte_histogram_pure,
     _cosine_similarity,
+    _utf8_continuation_score_pure,
     byte_histogram,
     cp1252_zone_ratio,
     detect_null_pattern,
@@ -101,10 +103,16 @@ def test_histogram_to_ratios_empty() -> None:
 
 
 def test_histogram_eight_byte_loop() -> None:
-    """Exercise the 8-byte unrolled loop in byte_histogram."""
+    """Exercise the 8-byte unrolled loop in the pure-Python histogram (always)."""
     payload = bytes(range(16))
-    h = byte_histogram(payload)
+    h = _byte_histogram_pure(payload)
     assert sum(h) == 16
+
+
+def test_pure_histogram_matches_public_api() -> None:
+    """Rust and pure paths must agree on counts (CI always builds the extension)."""
+    data = b"aab" + bytes(range(200))
+    assert list(_byte_histogram_pure(data)) == list(byte_histogram(data))
 
 
 def test_histogram_to_ratios_nonempty() -> None:
@@ -134,6 +142,14 @@ def test_cp1252_zone_ratio_cp1252_bytes() -> None:
 def test_utf8_continuation_invalid_leading_byte() -> None:
     score = utf8_continuation_score(b"\xff\x80\x80\x80")
     assert 0.0 <= score <= 1.0
+
+
+def test_utf8_continuation_pure_branches() -> None:
+    """Exercise pure UTF-8 scoring even when Rust shadows the public wrapper."""
+    assert _utf8_continuation_score_pure(b"") == 0.0
+    assert _utf8_continuation_score_pure(b"\xff\xfe") == 0.0
+    seq = "\u00e9\u00e0".encode("utf-8")
+    assert _utf8_continuation_score_pure(seq) > 0.0
 
 
 def test_detect_null_pattern_utf32_be() -> None:

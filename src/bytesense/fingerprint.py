@@ -16,12 +16,8 @@ from typing import List, Tuple
 # ---------------------------------------------------------------------------
 
 
-def byte_histogram(data: bytes) -> array.array:
-    """
-    Compute byte frequency histogram.
-    Returns a 256-element ``array.array("L", ...)`` of occurrence counts.
-    O(n), single pass.
-    """
+def _byte_histogram_pure(data: bytes) -> array.array:
+    """Pure-Python byte histogram (also used when the Rust extension is absent)."""
     hist: array.array = array.array("L", [0] * 256)
     # Process 8 bytes at a time to hint CPython for loop unrolling
     i = 0
@@ -75,8 +71,9 @@ def cp1252_zone_ratio(hist: array.array, total: int) -> float:
     return sum(hist[0x80:0xA0]) / total
 
 
-def utf8_continuation_score(data: bytes) -> float:
+def _utf8_continuation_score_pure(data: bytes) -> float:
     """
+    Pure-Python UTF-8 continuation scoring (also used when Rust is absent).
     Score how well `data` fits UTF-8 multibyte sequence structure.
     Returns 0.0 (no evidence) to 1.0 (strong UTF-8 multibyte pattern).
     Works even when the data is not fully valid UTF-8.
@@ -227,11 +224,24 @@ from ._rust import (  # noqa: E402 — intentional late import
     rust_utf8_continuation_score,
 )
 
-if _RUST_AVAILABLE:
-    import array as _array
 
-    def byte_histogram(data: bytes) -> _array.array:  # type: ignore[no-redef]
+def byte_histogram(data: bytes) -> array.array:
+    """
+    Compute byte frequency histogram.
+    Returns a 256-element ``array.array("L", ...)`` of occurrence counts.
+    O(n), single pass. Uses Rust when available.
+    """
+    if _RUST_AVAILABLE:
         return rust_byte_histogram(data)
+    return _byte_histogram_pure(data)
 
-    def utf8_continuation_score(data: bytes) -> float:  # type: ignore[no-redef]
+
+def utf8_continuation_score(data: bytes) -> float:
+    """
+    Score how well `data` fits UTF-8 multibyte sequence structure.
+    Returns 0.0 (no evidence) to 1.0 (strong UTF-8 multibyte pattern).
+    Works even when the data is not fully valid UTF-8. Uses Rust when available.
+    """
+    if _RUST_AVAILABLE:
         return rust_utf8_continuation_score(data)
+    return _utf8_continuation_score_pure(data)
