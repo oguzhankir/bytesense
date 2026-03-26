@@ -47,9 +47,21 @@ pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://
 
 ## PyPI (production)
 
-Publishing runs from [`.github/workflows/release.yml`](.github/workflows/release.yml) when you **publish** a GitHub Release (draft releases do not run it). Bump `version` in `pyproject.toml` and `rust/Cargo.toml` to match the release tag first.
+Bump `version` in `pyproject.toml` and `rust/Cargo.toml` before uploading.
 
-On PyPI, enable **trusted publishing** for this repository: [project → Settings → Publishing](https://pypi.org/manage/project/bytesense/settings/publishing/). The workflow uses OIDC (`id-token: write`); no `PYPI_API_TOKEN` secret is required.
+**Manual upload** (token from [pypi.org → Account → API tokens](https://pypi.org/manage/account/token/)):
+
+```bash
+export TWINE_USERNAME=__token__
+export TWINE_PASSWORD='pypi-...'
+./scripts/upload_pypi.sh
+```
+
+Same rule as Test PyPI: do not put `#` comments on the same line as `export TWINE_PASSWORD=...` in zsh.
+
+If upload returns **400 Bad Request**, run `twine upload dist/* --verbose` and read PyPI’s JSON error text. Common causes: **invalid or placeholder author email** in metadata (`example.com` is rejected), **duplicate version** (file already on PyPI), or **unverified email** on your PyPI account.
+
+**GitHub Actions** (optional): publishing from [`.github/workflows/release.yml`](.github/workflows/release.yml) when you **publish** a GitHub Release requires [trusted publishing](https://pypi.org/manage/project/bytesense/settings/publishing/) on PyPI (OIDC; no upload token in secrets).
 
 ## Style
 

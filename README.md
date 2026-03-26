@@ -4,7 +4,6 @@
 
 <p align="center">
   <strong>Charset detection that stays fast, honest, and dependency-free.</strong><br>
-  <sub>Byte fingerprints · pre-computed tables · optional Rust · zero ML · zero runtime dependencies</sub>
 </p>
 
 <p align="center">

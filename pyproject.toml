@@ -10,10 +10,10 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.8"
 authors = [
-  { name = "Oğuzhan Kır", email = "oguzhan@example.com" },
+  { name = "Oğuzhan Kır", email = "oguzhankir17@gmail.com" },
 ]
 maintainers = [
-  { name = "Oğuzhan Kır", email = "oguzhan@example.com" },
+  { name = "Oğuzhan Kır", email = "oguzhankir17@gmail.com" },
 ]
 keywords = [
   "encoding",
@@ -78,7 +78,7 @@ manifest-path = "rust/Cargo.toml"
 python-source = "src"
 module-name   = "bytesense._rust_core"
 features      = ["pyo3/extension-module"]
-include       = ["src/bytesense/py.typed"]
+include       = ["src/bytesense/py.typed", "LICENSE"]
 
 [tool.ruff]
 line-length    = 100
