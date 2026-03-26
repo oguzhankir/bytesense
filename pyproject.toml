@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling>=1.18", "maturin>=1.4,<2"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.4,<2"]
+build-backend = "maturin"
 
 [project]
 name = "bytesense"
@@ -48,6 +48,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+# Native acceleration is in platform wheels built with maturin; no extra Python deps to list here.
 fast = []
 dev = [
   "pytest>=8.0",
@@ -70,9 +71,6 @@ Homepage    = "https://github.com/oguzhankir/bytesense"
 Repository  = "https://github.com/oguzhankir/bytesense"
 Issues      = "https://github.com/oguzhankir/bytesense/issues"
 Changelog   = "https://github.com/oguzhankir/bytesense/blob/main/CHANGELOG.md"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/bytesense"]
 
 [tool.maturin]
 manifest-path = "rust/Cargo.toml"

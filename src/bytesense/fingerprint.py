@@ -221,20 +221,17 @@ def fingerprint_cosine_for_encoding(data: bytes, encoding: str) -> float:
     return _cosine_similarity(ratios, fp)
 
 
-from ._rust import _RUST_AVAILABLE  # noqa: E402 — intentional late import
+from ._rust import (  # noqa: E402 — intentional late import
+    _RUST_AVAILABLE,
+    rust_byte_histogram,
+    rust_utf8_continuation_score,
+)
 
 if _RUST_AVAILABLE:
     import array as _array
 
-    from ._rust_core import (  # type: ignore[import]
-        byte_histogram as _rust_bh,
-    )
-    from ._rust_core import (
-        utf8_continuation_score as _rust_u8s,
-    )
-
     def byte_histogram(data: bytes) -> _array.array:  # type: ignore[no-redef]
-        return _array.array("L", _rust_bh(data))
+        return rust_byte_histogram(data)
 
     def utf8_continuation_score(data: bytes) -> float:  # type: ignore[no-redef]
-        return _rust_u8s(data)
+        return rust_utf8_continuation_score(data)

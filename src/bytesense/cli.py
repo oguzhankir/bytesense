@@ -38,7 +38,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         d["path"] = str(Path(filepath).resolve())
         if not args.verbose:
             d.pop("why", None)
-            d.pop("confidence_interval", None)
+            # confidence_interval kept for default JSON (matches README / API transparency)
         results.append(d)
 
     if not args.minimal:

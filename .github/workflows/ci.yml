@@ -22,11 +22,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install (editable, no Rust required)
+      - uses: dtolnay/rust-toolchain@stable
+
+      # PEP 517 backend is maturin; a toolchain is required so editable installs can compile the extension.
+      - name: Install (editable)
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      # Refreshes committed src/bytesense/data/fingerprints.py from ALL_ENCODINGS (must stay in sync).
       - name: Generate fingerprints
         run: python scripts/build_fingerprints.py
 

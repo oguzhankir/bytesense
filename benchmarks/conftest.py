@@ -76,7 +76,7 @@ _RAW: List[Tuple[str, str | bytes, str]] = [
     ),
     (
         "utf8_bom",
-        "\ufeffHello with BOM! UTF-8 text with byte order mark.",
+        "Hello with BOM! UTF-8 text with byte order mark.",
         "utf_8_sig",
     ),
     # --- Extra UTF-8 variety (legacy SBCS cases are ambiguous across detectors) ---

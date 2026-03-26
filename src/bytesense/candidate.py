@@ -191,8 +191,9 @@ class CandidateSelector:
                 seen.add(enc)
                 final.append(enc)
 
-        # Must cover CJK + ISO-2022 after the long Windows/Latin preferred prefix.
-        return final[:40] if final else ALL_ENCODINGS[:40]
+        # Cap decode attempts for speed. The SBCS/CJK ``preferred`` prefix is ~28 encodings
+        # before ``shift_jis`` / ``euc_jp`` / ``cp949``; slicing below that breaks benchmarks.
+        return final[:28] if final else ALL_ENCODINGS[:28]
 
     def exclude_similar_to_failed(
         self,

@@ -112,7 +112,7 @@ positional arguments:
 
 optional arguments:
   -h, --help        show this help and exit
-  -v, --verbose     Include full JSON (e.g. why, confidence interval)
+  -v, --verbose     Include the ``why`` field in JSON (``confidence_interval`` is always shown)
   -m, --minimal     Print only the detected encoding name
   --version         Show version and exit
 ```
@@ -135,11 +135,12 @@ python -m bytesense.cli --version
   "bom_detected": false,
   "chaos": 0.02,
   "coherence": 0.41,
-  "why": "Valid UTF-8. Chaos 2.0%. Coherence 41.0% (English).",
   "byte_count": 2048,
   "path": "/absolute/path/to/file"
 }
 ```
+
+Use ``-v`` to add the human-readable ``why`` string to each object.
 
 ## Python
 

@@ -21,6 +21,8 @@ from typing import List, Tuple
 
 import pytest
 
+from benchmarks.conftest import DATASET as _FULL_DATASET
+
 # ---------------------------------------------------------------------------
 # Accuracy helpers
 # ---------------------------------------------------------------------------
@@ -65,14 +67,12 @@ def _functional_text_match(data: bytes, detected: str | None, expected: str) -> 
     return ta.lstrip("\ufeff") == tb.lstrip("\ufeff")
 
 
-def _load_dataset_parts() -> Tuple[List[Tuple[str, bytes, str]], List[Tuple[str, bytes, str]]]:
-    ds = __import__("benchmarks.conftest", fromlist=["DATASET"]).DATASET
-    syn = [(n, d, e) for n, d, e in ds if not n.startswith("cn_official_")]
-    cn = [(n, d, e) for n, d, e in ds if n.startswith("cn_official_")]
-    return syn, cn
-
-
-_SYNTHETIC_DATASET, _CN_OFFICIAL_DATASET = _load_dataset_parts()
+_SYNTHETIC_DATASET: List[Tuple[str, bytes, str]] = [
+    (n, d, e) for n, d, e in _FULL_DATASET if not n.startswith("cn_official_")
+]
+_CN_OFFICIAL_DATASET: List[Tuple[str, bytes, str]] = [
+    (n, d, e) for n, d, e in _FULL_DATASET if n.startswith("cn_official_")
+]
 
 
 # ---------------------------------------------------------------------------
@@ -174,12 +174,10 @@ class TestAccuracy:
         pytest.importorskip("charset_normalizer")
         from charset_normalizer import from_bytes as cn_from_bytes
 
-        from benchmarks.conftest import DATASET
-
         correct = 0
-        total = len(DATASET)
+        total = len(_FULL_DATASET)
 
-        for _name, data, expected in DATASET:
+        for _name, data, expected in _FULL_DATASET:
             result = cn_from_bytes(data)
             best = result.best()
             detected = best.encoding if best else None
@@ -189,7 +187,7 @@ class TestAccuracy:
         accuracy = correct / total if total > 0 else 0.0
         print(f"\ncharset-normalizer strict codec match: {accuracy:.1%} ({correct}/{total})")
         fn_c = 0
-        for _n, data, exp in DATASET:
+        for _n, data, exp in _FULL_DATASET:
             b = cn_from_bytes(data).best()
             det = b.encoding if b else None
             if _functional_text_match(data, det, exp):

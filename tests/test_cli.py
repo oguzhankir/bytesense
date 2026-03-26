@@ -52,6 +52,7 @@ def test_main_default_json_omits_why(capsys: pytest.CaptureFixture[str]) -> None
     data = json.loads(capsys.readouterr().out)
     assert "path" in data
     assert "why" not in data
+    assert "confidence_interval" in data
 
 
 def test_main_two_files_outputs_list(capsys: pytest.CaptureFixture[str]) -> None:

@@ -1259,24 +1259,54 @@ BIGRAM_FREQUENCIES: dict[str, list[str]] = {
 
 # Language → typical encoding(s). Used to boost candidate scoring.
 LANGUAGE_ENCODINGS: dict[str, list[str]] = {
+    # Germanic / Western European
     "English": ["ascii", "utf_8", "latin_1", "cp1252"],
     "German": ["utf_8", "cp1252", "latin_1", "iso8859_15"],
     "French": ["utf_8", "cp1252", "latin_1", "iso8859_15"],
+    "Dutch": ["utf_8", "cp1252", "latin_1", "iso8859_15"],
+    "Swedish": ["utf_8", "cp1252", "iso8859_15", "latin_1"],
+    "Norwegian": ["utf_8", "cp1252", "iso8859_15", "latin_1"],
+    "Danish": ["utf_8", "cp1252", "iso8859_15", "latin_1"],
+    "Finnish": ["utf_8", "cp1252", "iso8859_15", "latin_1"],
+    # Romance
     "Spanish": ["utf_8", "cp1252", "latin_1", "iso8859_15"],
     "Italian": ["utf_8", "cp1252", "latin_1", "iso8859_15"],
+    "Portuguese": ["utf_8", "cp1252", "latin_1", "iso8859_15"],
+    "Romanian": ["utf_8", "cp1250", "iso8859_2"],
+    # Slavic Latin
     "Polish": ["utf_8", "cp1250", "iso8859_2"],
+    "Czech": ["utf_8", "cp1250", "iso8859_2"],
+    "Slovak": ["utf_8", "cp1250", "iso8859_2"],
+    "Croatian": ["utf_8", "cp1250", "iso8859_2"],
+    "Slovene": ["utf_8", "cp1250", "iso8859_2"],
+    # Baltic
     "Lithuanian": ["utf_8", "cp1257", "iso8859_13"],
-    "Vietnamese": ["utf_8", "cp1258"],
-    "Russian": ["utf_8", "cp1251", "koi8_r", "iso8859_5"],
-    "Ukrainian": ["utf_8", "cp1251", "koi8_u"],
+    "Estonian": ["utf_8", "cp1257", "iso8859_13"],
+    # Cyrillic
+    "Russian": ["utf_8", "cp1251", "koi8_r", "cp866", "mac_cyrillic", "iso8859_5"],
+    "Ukrainian": ["utf_8", "cp1251", "koi8_u", "iso8859_5"],
     "Bulgarian": ["utf_8", "cp1251", "iso8859_5"],
     "Serbian": ["utf_8", "cp1251"],
+    "Kazakh": ["utf_8", "cp1251", "ptcp154", "kz1048"],
+    # Greek
     "Greek": ["utf_8", "cp1253", "iso8859_7"],
+    # Turkish / Central Asian
     "Turkish": ["utf_8", "cp1254", "iso8859_9"],
+    "Hungarian": ["utf_8", "cp1250", "iso8859_2"],
+    # Semitic
     "Hebrew": ["utf_8", "cp1255", "iso8859_8"],
     "Arabic": ["utf_8", "cp1256", "iso8859_6"],
+    "Farsi": ["utf_8", "cp1256", "iso8859_6"],
+    # South/Southeast Asian
+    "Hindi": ["utf_8"],
+    "Tamil": ["utf_8"],
+    "Thai": ["utf_8", "tis_620", "iso8859_11"],
+    "Vietnamese": ["utf_8", "cp1258"],
+    # East Asian
     "Chinese": ["utf_8", "gb18030", "gbk", "gb2312", "big5"],
     "Japanese": ["utf_8", "shift_jis", "euc_jp", "cp932", "iso2022_jp"],
     "Korean": ["utf_8", "euc_kr", "cp949", "johab"],
-    "Thai": ["utf_8", "tis_620", "iso8859_11"],
+    # Austronesian
+    "Indonesian": ["utf_8", "ascii", "latin_1", "cp1252"],
+    "Malay": ["utf_8", "ascii", "latin_1", "cp1252"],
 }
