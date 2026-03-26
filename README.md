@@ -35,93 +35,76 @@
 
 If you already use `chardet.detect()` or `charset_normalizer.detect()`, you can swap in `bytesense.detect()` with minimal code churn.
 
-## At a glance
+## Comparison with chardet & charset-normalizer
 
-| | [chardet](https://github.com/chardet/chardet) | [charset-normalizer](https://github.com/Ousret/charset_normalizer) | **bytesense** |
-|---|:---:|:---:|:---:|
-| **Runtime Python dependencies** | 0 | 0 | **0** |
-| **ML / model weights** | No | No | **No** |
-| **Native acceleration (optional)** | — | — | **Rust** (`pip install "bytesense[fast]"`)
-| **Streaming-first API** | Limited | Via API patterns | **`StreamDetector`**
-| **Explainable result (`why`)** | Partial | Rich metadata | **Yes** (always)
-| **Wheel size (typical)** | ~hundreds of kB | ~150 kB | **Small** (pure Python + data tables)
-| **IANA encodings (via stdlib codecs)** | Broad | Broad | **Broad** (same idea: decode candidates)
+Same idea as the [charset-normalizer README](https://github.com/Ousret/charset_normalizer): a **feature matrix** and **measured** accuracy on the bundled suites, so you can see where bytesense stands—not hand-wavy marketing.
 
-This table compares *design*; run the included benchmarks on your own hardware and datasets to compare latency and accuracy for your workload.
+### Feature matrix
 
-## Performance
+| Feature | [Chardet](https://github.com/chardet/chardet) | [Charset Normalizer](https://github.com/Ousret/charset_normalizer) | **bytesense** |
+|---------|:---:|:---:|:---:|
+| Fast | ✅ | ✅ | ✅ |
+| Universal¹ | ❌ | ✅ | ✅ |
+| Reliable without distinguishable standards | ✅ | ✅ | ✅ |
+| Reliable with distinguishable standards | ✅ | ✅ | ✅ |
+| License | MIT | MIT | MIT |
+| Native Python (no C extension required) | ✅ | ✅ | ✅ |
+| Optional native acceleration | — | — | Rust (`pip install "bytesense[fast]"`) |
+| Detect spoken language | ✅ | ✅ | ✅ |
+| Explainable detection (`why`) | Partial | Rich metadata | **Yes** (always) |
+| Streaming-first API | Limited | Via API patterns | **`StreamDetector`** |
+| Wheel size (typical) | ~500 kB | ~150 kB | Small (pure Python + tables) |
+| Custom codecs via stdlib registration | ❌ | ✅ | ✅ (same `codecs` model) |
 
-### Accuracy (library comparison)
+¹ *Universal* in the charset-normalizer sense: coverage follows **what your Python build exposes through `codecs`** as decode candidates—not a fixed “99 encodings” count on every platform.
 
-On the bundled benchmark (`pytest benchmarks/test_bench_detection.py -k accuracy`), bytesense reaches **100%** on both **strict** codec labels and **functional** (same Unicode text) for the **39-case** suite, ahead of charset-normalizer and chardet on these metrics.
+### Accuracy (bundled tests, three-way)
 
-The **hard stress** corpus (`benchmarks/test_hard_scenarios.py`, 24 paragraph-sized ambiguous samples) is informational: bytesense scores **100% functional** and leads on **strict** versus the same two libraries in that table. Re-run `./scripts/compare_libraries.sh` after changes to refresh printed numbers.
+Numbers below are from the same **`./scripts/compare_libraries.sh`** run the CI exercises: **chardet**, **charset-normalizer**, and **bytesense** on identical inputs. **Strict** = detected codec name matches the reference (after `codecs.lookup` aliases). **Functional** = decoded Unicode matches the reference encoding (multiple labels can count if they decode to the same text—same spirit as charset-normalizer’s comparisons).
 
-### Speed (pytest-benchmark)
+**39-case suite** (synthetic + charset-normalizer’s published `data/` samples, expected labels aligned with their tests):
 
-Rough single-thread means from `pytest benchmarks/test_bench_detection.py` with the speed test filter (same machine, Python 3.12; **your numbers will differ**):
+| Package | Strict | Functional |
+|---------|--------|------------|
+| **bytesense** | **100%** (39/39) | **100%** (39/39) |
+| charset-normalizer | 92.3% (36/39) | 97.4% (38/39) |
+| chardet | 79.5% (31/39) | 97.4% (38/39) |
 
-| Sample (full `from_bytes` / `detect`) | bytesense | chardet |
-|--------------------------------------|-----------|---------|
+**24-case hard stress** (paragraph-sized, ambiguous SBCS / CJK / UTF-16 / ISO-2022 — `benchmarks/test_hard_scenarios.py`):
+
+| Package | Strict | Functional |
+|---------|--------|------------|
+| **bytesense** | **83.3%** (20/24) | **100%** (24/24) |
+| charset-normalizer | 41.7% (10/24) | 58.3% (14/24) |
+| chardet | 70.8% (17/24) | 91.7% (22/24) |
+
+*Updated March 2026 — CPython 3.12, chardet 7.x, charset-normalizer 3.4.x, bytesense 0.1.0. Your CPU and dependency versions will differ; re-run `./scripts/compare_libraries.sh` to refresh.*
+
+### Speed (pytest-benchmark, same machine snapshot)
+
+Rough single-thread means (`pytest benchmarks/test_bench_detection.py`, speed filter; **your numbers will differ**):
+
+| Sample (`from_bytes` / `detect`) | bytesense | chardet |
+|----------------------------------|-----------|---------|
 | `utf8_bom` | ~4 µs | ~104 µs |
 | `utf8_ascii_only` | ~46 µs | ~114 µs |
 
-Valid UTF-8 with BOM is an early exit in bytesense; chardet still runs its full probe. On other samples the picture is mixed—always profile your own payloads.
+UTF-8 with BOM is an early exit in bytesense; chardet still runs its full probe. Profile your own payloads.
 
-Benchmarks use (1) **synthetic** samples and (2) **charset-normalizer’s published `data/` files** with the same expected encodings as their `tests/test_full_detection.py` (downloaded into `benchmarks/data/cn_official/`).
+### How to reproduce
 
 ```bash
 pip install -e ".[dev]"
 python scripts/build_fingerprints.py
-python scripts/fetch_cn_benchmark_samples.py   # official CN corpus (use the same venv — see below)
+python scripts/fetch_cn_benchmark_samples.py   # CN `data/` mirrors into benchmarks/data/cn_official/
+./scripts/compare_libraries.sh                   # prints the tables above (accuracy + hard stress)
 ```
 
-**One-shot report** (accuracy tables, hard scenarios, speed benches — paste the whole terminal output):
+Options: `./scripts/compare_libraries.sh --no-fetch` (no download), `--no-hard` (skip 24-case stress). Full benches: `./scripts/run_all_benchmarks.sh`.
 
-```bash
-./scripts/run_all_benchmarks.sh              # full run
-./scripts/run_all_benchmarks.sh --no-speed   # skip pytest-benchmark (faster)
-```
+**Fingerprint script:** Lines like `utf_16` “skipped” are normal — UTF-16/32 are handled via BOM / null-byte rules, not the single-byte histogram table.
 
-**Library comparison only** (bytesense vs **chardet** vs **charset-normalizer** — accuracy tables, no speed benches):
-
-```bash
-./scripts/compare_libraries.sh                 # fingerprints + fetch CN samples + accuracy + hard stress
-./scripts/compare_libraries.sh --no-fetch    # synthetic samples only (no download)
-./scripts/compare_libraries.sh --no-hard     # skip paragraph-sized stress test (faster)
-```
-
-What to copy for release notes or this README: the printed **Strict** and **Functional** summary blocks, plus the charset-normalizer informational lines. Re-run on a quiet machine and paste when you want to refresh the numbers.
-
-Individual steps:
-
-```bash
-pytest benchmarks/test_bench_detection.py -k "accuracy" -v -s   # -s prints accuracy tables
-pytest benchmarks/test_hard_scenarios.py -v -s   # optional: paragraph-sized stress corpus (three-way table)
-pytest benchmarks/test_bench_detection.py \
-  -k "test_bench_bytesense_fast_path or test_bench_cn_fast_path or test_bench_bytesense_full or test_bench_cn_full or test_bench_chardet_full" \
-  --benchmark-sort=mean -v
-```
-
-**Note:** On the combined benchmark suite above, bytesense currently matches or exceeds rivals on **both** strict and functional scores; older README text suggested CN would always win on strict—re-run the tests if you need an exact snapshot for a release.
-
-**Fingerprint script:** Lines like `utf_16` “skipped” are normal — those encodings are handled by BOM / null-byte logic, not the single-byte histogram table.
-
-**Troubleshooting `fetch_cn_benchmark_samples.py` (SSL on macOS):** Always run scripts with the project interpreter, e.g. `.venv/bin/python scripts/fetch_cn_benchmark_samples.py`. Install CA bundles with `pip install certifi` (included in `[dev]`). If HTTPS still fails: run Apple’s *Install Certificates.command* for your Python, or `python scripts/fetch_cn_benchmark_samples.py --insecure` as a last resort.
-
-The summary test prints **two** scores per library:
-
-- **Strict**: detected codec name matches the reference (after `codecs.lookup` normalization).
-- **Functional**: decoded **Unicode text** matches what the reference encoding would produce (so cp1253 vs iso8859_7 counts as correct when the bytes decode to the same string—same idea charset-normalizer uses when multiple labels fit).
-
-| Library | Accuracy (dataset) | Notes |
-|--------|-------------------|--------|
-| bytesense (pure Python) | Run `pytest … -k accuracy` | Synthetic corpus: strict gate; CN files: functional floor in tests |
-| bytesense + Rust | Same detection path; faster histogram / UTF-8 helpers | `maturin develop --release`
-| charset-normalizer | Printed in `test_charset_normalizer_accuracy_for_comparison` | Should hit 100% functional on its own `data/` files |
-| chardet | Optional in speed benches | Legacy baseline |
-
-Fill the **mean / p95 / p99** table from your `pytest-benchmark` JSON and paste it here for your release notes.
+**Troubleshooting `fetch_cn_benchmark_samples.py` (SSL on macOS):** Use `.venv/bin/python scripts/...`. `certifi` is in `[dev]`. If HTTPS still fails: *Install Certificates.command* for your Python, or `python scripts/fetch_cn_benchmark_samples.py --insecure` as a last resort.
 
 ## Installation
 
