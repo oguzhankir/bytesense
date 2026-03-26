@@ -49,6 +49,9 @@ def test_rust_utf8_check_invalid() -> None:
 
 def test_rust_is_faster_than_python() -> None:
     """Rust histogram must be at least 5x faster than pure Python on 100KB data."""
+    if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
+        pytest.skip("Performance assertions are too noisy on shared CI runners")
+
     import time
 
     from bytesense._rust_core import byte_histogram as rust_hist  # type: ignore[import-untyped]
@@ -75,6 +78,5 @@ def test_rust_is_faster_than_python() -> None:
     py_time = time.perf_counter() - t0
 
     speedup = py_time / rust_time
-    # CI runners have noisy timers; keep a strict bar locally only.
-    min_speedup = 2.0 if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS") else 5.0
+    min_speedup = 5.0
     assert speedup >= min_speedup, f"Expected >={min_speedup}x speedup, got {speedup:.1f}x"
