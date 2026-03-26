@@ -2,7 +2,6 @@
   <img src="assets/bytesense_logo.svg" alt="bytesense logo" width="520" />
 </p>
 
-<h1 align="center">bytesense</h1>
 <p align="center">
   <strong>Charset detection that stays fast, honest, and dependency-free.</strong><br>
   <sub>Byte fingerprints · pre-computed tables · optional Rust · zero ML · zero runtime dependencies</sub>
@@ -129,6 +128,12 @@ Fill the **mean / p95 / p99** table from your `pytest-benchmark` JSON and paste 
 ```bash
 pip install bytesense                 # pure Python — always works
 pip install "bytesense[fast]"       # same API; uses Rust wheel when available for your platform
+```
+
+**Test PyPI** (pre-release smoke test): after publishing to [test.pypi.org](https://test.pypi.org/), install with an extra index so pip can fetch build tools from PyPI:
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bytesense
 ```
 
 ## CLI

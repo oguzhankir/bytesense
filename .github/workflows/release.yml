@@ -1,8 +1,15 @@
+# Publishes to PyPI when a GitHub Release is published (not draft).
+# Configure trusted publishing on https://pypi.org/manage/project/bytesense/settings/publishing/
+# for this repo and workflow file.
+
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
 
 jobs:
   build-sdist:
@@ -49,7 +56,9 @@ jobs:
   publish:
     needs: [build-sdist, build-rust-wheels]
     runs-on: ubuntu-latest
-    environment: pypi
+    environment:
+      name: pypi
+      url: https://pypi.org/project/bytesense/
     permissions:
       id-token: write
     steps:
@@ -57,4 +66,5 @@ jobs:
         with:
           path: dist/
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

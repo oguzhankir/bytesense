@@ -61,6 +61,7 @@ dev = [
   "chardet>=5.0",
   "requests>=2.31",
   "certifi>=2023.0",
+  "twine>=5.0",
 ]
 
 [project.scripts]
