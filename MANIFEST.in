@@ -1,0 +1,4 @@
+include LICENSE README.md CHANGELOG.md
+recursive-include rust *.toml *.lock *.rs
+recursive-include src/bytesense *.py py.typed
+prune rust/target

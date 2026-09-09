@@ -5,8 +5,10 @@ Splits a byte sequence into segments and detects encoding per-segment.
 Useful for legacy email with mixed encodings or multi-part documents.
 
 """
+
 from __future__ import annotations
 
+import codecs
 import sys
 from dataclasses import dataclass, replace
 from typing import Dict, List, Optional
@@ -33,8 +35,8 @@ class DocumentSegment:
     @property
     def text(self) -> str:
         if self.encoding is None:
-            return self.data.decode("utf_8", errors="replace")
-        return self.data.decode(self.encoding, errors="replace")
+            raise UnicodeError("segment encoding is unknown; choose an explicit decoding policy")
+        return self.data.decode(self.encoding, errors="strict")
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -79,7 +81,7 @@ def detect_multi(
     Detect encoding(s) in a potentially mixed-encoding document.
 
     Algorithm:
-    1. Split `data` into overlapping segments of `segment_size` bytes.
+    1. Split `data` into contiguous segments near `segment_size` bytes.
     2. Detect encoding for each segment independently.
     3. Merge adjacent segments with the same encoding.
     4. Return the segment list.
@@ -93,9 +95,28 @@ def detect_multi(
     Returns:
         :class:`MultiEncodingResult`
     """
-    if len(data) <= segment_size:
+    if not isinstance(data, bytes):
+        raise TypeError("data must be bytes")
+    if not isinstance(segment_size, int) or isinstance(segment_size, bool) or segment_size <= 0:
+        raise ValueError("segment_size must be a positive integer")
+    if (
+        not isinstance(min_segment_bytes, int)
+        or isinstance(min_segment_bytes, bool)
+        or min_segment_bytes <= 0
+    ):
+        raise ValueError("min_segment_bytes must be a positive integer")
+    if not 0.0 <= merge_threshold <= 1.0:
+        raise ValueError("merge_threshold must be between 0 and 1")
+    whole = from_bytes(data)
+    # A fully validated Unicode/stateful stream must not be cut into arbitrary
+    # byte windows; those windows can start inside a code unit or shift state.
+    uniform = whole.encoding is not None and (
+        whole.encoding.startswith("utf_")
+        or (whole.encoding.startswith("iso2022_") or whole.encoding == "hz")
+    )
+    if len(data) <= segment_size or uniform:
         # Single-segment case — fast path
-        result = from_bytes(data)
+        result = whole
         seg = DocumentSegment(start=0, end=len(data), data=data, detection=result)
         return MultiEncodingResult(
             segments=[seg],
@@ -108,10 +129,26 @@ def detect_multi(
     pos = 0
     while pos < len(data):
         end = min(pos + segment_size, len(data))
+        if 0 < len(data) - end < min_segment_bytes:
+            end = len(data)
+        # When a full-file candidate is available, avoid cutting a complete
+        # multibyte character at the right edge. Internal decode failures are
+        # left to segment detection; no bytes are discarded.
+        if whole.encoding and end < len(data):
+            try:
+                decoder = codecs.getincrementaldecoder(whole.encoding)()
+                decoder.decode(data[pos:end], final=False)
+                for _ in range(8):
+                    pending = decoder.getstate()[0]
+                    if not pending or end == len(data):
+                        break
+                    decoder.decode(data[end : end + 1], final=False)
+                    end += 1
+            except (UnicodeError, LookupError, TypeError):
+                pass
         chunk = data[pos:end]
-        if len(chunk) >= min_segment_bytes:
-            r = from_bytes(chunk)
-            raw_segments.append((pos, end, r))
+        r = from_bytes(chunk)
+        raw_segments.append((pos, end, r))
         pos = end
 
     # Merge adjacent segments with same encoding
@@ -126,7 +163,13 @@ def detect_multi(
             ):
                 cur_end = end
                 merged_len = cur_end - cur_start
-                cur_result = replace(cur_result, byte_count=merged_len)
+                cur_result = replace(
+                    cur_result,
+                    byte_count=merged_len,
+                    bytes_validated=merged_len if cur_result.encoding else 0,
+                    bytes_examined=cur_result.bytes_examined + result.bytes_examined,
+                    confidence=min(cur_result.confidence, result.confidence),
+                )
             else:
                 merged.append(
                     DocumentSegment(

@@ -4,13 +4,17 @@ Optional Rust extension loader.
 Exports accelerated implementations when the compiled extension is available.
 Falls back to pure-Python equivalents in higher layers (see fingerprint.py).
 """
+
 from __future__ import annotations
 
 import array
+import os
 
 _RUST_AVAILABLE: bool = False
 
 try:
+    if os.environ.get("BYTESENSE_PURE_PYTHON") == "1":
+        raise ImportError("Pure Python explicitly requested")
     from bytesense._rust_core import (  # type: ignore[import-untyped]
         byte_histogram as _core_byte_histogram,
     )
@@ -34,7 +38,7 @@ def is_rust_available() -> bool:
 if _RUST_AVAILABLE:
 
     def rust_byte_histogram(data: bytes) -> array.array:
-        return array.array("L", _core_byte_histogram(data))  # type: ignore[misc]
+        return array.array("Q", _core_byte_histogram(data))  # type: ignore[misc]
 
     def rust_utf8_continuation_score(data: bytes) -> float:
         return _core_utf8_continuation_score(data)  # type: ignore[misc]

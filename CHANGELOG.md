@@ -1,5 +1,29 @@
 # Changelog
 
+
+## 1.0.0
+
+### Detection and correctness
+- Replace the bespoke ranking pipeline with a reproducibly generated character-pair model and optional native scoring.
+- Strictly validate every returned codec against the complete input, with explicit sample/validation counts and completion status.
+- Normalize filters on all paths; an empty isolation list permits no codecs.
+- Use BOM-consuming UTF-16/32 codecs, improve non-Latin Unicode lane detection, and recognize 7-bit shift syntax.
+- Remove fabricated confidence intervals; scores are explicitly uncalibrated. Language reporting is opt-in.
+
+### Streams and data handling
+- Consume streams to EOF by default with bounded memory and temporary-file spooling.
+- Preserve late informative samples across chunk boundaries; reject feeding after finalization.
+- Retain every mixed-document byte, including short tails, and preserve Unicode boundaries.
+- Use strict decoding for repair and segments; do not silently replace undecodable bytes.
+- Add CLI stdin support, configuration flags and meaningful exit codes.
+
+### Packaging and verification
+- Python 3.9+, portable compiler-free wheel/sdist installs, typed package marker, and CPython abi3 native wheels.
+- Distinct pure/native CI, installed-wheel tests, version checks, pinned/hash-verified corpus inputs and reproducible comparison tools.
+- Consolidate documentation; retain historical details in this changelog.
+
+See the README migration notes for intentional 0.x behavior changes.
+
 ## [0.1.2] — 2025-03-26
 
 ### Changed

@@ -2,10 +2,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 mod histogram;
+mod language;
 mod utf8;
 
 #[pyfunction]
-fn byte_histogram(data: &Bound<'_, PyBytes>) -> Vec<u32> {
+fn byte_histogram(data: &Bound<'_, PyBytes>) -> Vec<u64> {
     histogram::byte_histogram(data.as_bytes()).to_vec()
 }
 
@@ -41,6 +42,7 @@ fn detect_null_pattern(data: &Bound<'_, PyBytes>) -> i32 {
 
 #[pymodule]
 fn _rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<language::NgramModel>()?;
     m.add_function(wrap_pyfunction!(byte_histogram, m)?)?;
     m.add_function(wrap_pyfunction!(utf8_check, m)?)?;
     m.add_function(wrap_pyfunction!(utf8_continuation_score, m)?)?;

@@ -40,7 +40,10 @@ pub fn utf8_continuation_score(data: &[u8]) -> f64 {
             i += 1;
             continue;
         }
-        if data[i + 1..i + seq].iter().all(|&b| (0x80..=0xBF).contains(&b)) {
+        if data[i + 1..i + seq]
+            .iter()
+            .all(|&b| (0x80..=0xBF).contains(&b))
+        {
             valid += 1;
             i += seq;
         } else {
@@ -97,4 +100,22 @@ pub fn detect_null_pattern(data: &[u8]) -> i32 {
     }
 
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validation_rejects_invalid_scalars_and_truncated_sequences() {
+        for data in [
+            b"\xc0\xaf".as_slice(),
+            b"\xed\xa0\x80",
+            b"\xf4\x90\x80\x80",
+            b"\xe2\x82",
+        ] {
+            assert!(!utf8_check(data).0);
+        }
+        assert!(utf8_check("İstanbul 世界 🙂".as_bytes()).0);
+    }
 }

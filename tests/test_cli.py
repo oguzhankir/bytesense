@@ -72,7 +72,9 @@ def test_main_two_files_outputs_list(capsys: pytest.CaptureFixture[str]) -> None
 
 
 def test_main_all_missing_files_empty_json(capsys: pytest.CaptureFixture[str]) -> None:
-    main(["/nonexistent/bytesense-cli-404-a.txt", "/nonexistent/bytesense-cli-404-b.txt"])
+    assert (
+        main(["/nonexistent/bytesense-cli-404-a.txt", "/nonexistent/bytesense-cli-404-b.txt"]) == 1
+    )
     captured = capsys.readouterr()
     assert "Error" in captured.err
     assert json.loads(captured.out) == []
@@ -138,5 +140,5 @@ def test_cli_missing_file_prints_error() -> None:
         text=True,
         check=False,
     )
-    assert r.returncode == 0
+    assert r.returncode == 1
     assert "Error" in r.stderr

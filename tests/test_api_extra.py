@@ -30,6 +30,6 @@ def test_from_path_missing_raises() -> None:
         from_path("/nonexistent/path/bytesense-test-404.txt")
 
 
-def test_from_bytes_cp_isolation_empty_falls_back() -> None:
+def test_from_bytes_cp_isolation_empty_allows_nothing() -> None:
     r = from_bytes(b"hello", cp_isolation=[])
-    assert r.encoding is not None
+    assert r.encoding is None

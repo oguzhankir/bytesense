@@ -1,14 +1,14 @@
 [build-system]
-requires = ["maturin>=1.4,<2"]
-build-backend = "maturin"
+requires = ["setuptools>=68", "setuptools-rust>=1.12", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "bytesense"
-version = "0.1.2"
-description = "Fast, accurate charset/encoding detection. Zero ML. Zero dependencies. Optional Rust acceleration."
+version = "1.0.0"
+description = "Encoding detection with full-input validation, bounded-memory streams, and optional Rust acceleration."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
   { name = "Oğuzhan Kır", email = "oguzhankir17@gmail.com" },
 ]
@@ -25,18 +25,18 @@ keywords = [
   "charset-normalizer",
 ]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
@@ -48,7 +48,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# Native acceleration is in platform wheels built with maturin; no extra Python deps to list here.
+# Compatibility alias for 0.x installs. Native code is bundled in platform wheels.
 fast = []
 docs = [
   "mkdocs>=1.6",
@@ -61,7 +61,9 @@ dev = [
   "pytest-benchmark>=4.0",
   "mypy>=1.8",
   "ruff>=0.4",
-  "maturin>=1.4",
+  "build>=1.2",
+  "hypothesis>=6.100",
+  "setuptools-rust>=1.12",
   "charset-normalizer>=3.3",
   "chardet>=5.0",
   "requests>=2.31",
@@ -79,24 +81,23 @@ Issues      = "https://github.com/oguzhankir/bytesense/issues"
 Changelog     = "https://github.com/oguzhankir/bytesense/blob/main/CHANGELOG.md"
 Documentation = "https://oguzhankir.github.io/bytesense/"
 
-[tool.maturin]
-manifest-path = "rust/Cargo.toml"
-python-source = "src"
-module-name   = "bytesense._rust_core"
-features      = ["pyo3/extension-module"]
-include       = ["src/bytesense/py.typed", "LICENSE"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bytesense = ["py.typed", "data/*.json.gz"]
 
 [tool.ruff]
 line-length    = 100
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B"]
 ignore = ["E501"]
 
 [tool.mypy]
-# mypy 1.11+ no longer supports python_version 3.8; runtime still supports 3.8+.
-python_version      = "3.9"
+# Use the current mypy target; CI also runs Python 3.9.
+python_version      = "3.10"
 strict              = true
 warn_unused_ignores = false
 
@@ -115,7 +116,7 @@ disable_error_code = ["type-arg"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-norecursedirs = [".git", ".venv", ".ruff_cache", ".mypy_cache", "rust", "dist", "build", "htmlcov"]
+norecursedirs = [".hypothesis", ".git", ".venv", ".ruff_cache", ".mypy_cache", "rust", "dist", "build", "htmlcov"]
 addopts   = "-v --tb=short"
 
 [tool.coverage.run]

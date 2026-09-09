@@ -11,24 +11,29 @@ Improvements over charset-normalizer:
 - Word-length plausibility check
 - Sliding-window approach for large texts
 """
+
 from __future__ import annotations
 
+from collections import Counter
 from functools import lru_cache
 from typing import Optional, Tuple
 
 from .constant import BIGRAM_FREQUENCIES
 
+_VALID_BIGRAMS = {lang: frozenset(values) for lang, values in BIGRAM_FREQUENCIES.items()}
+_ALL_BIGRAMS = frozenset(bg for values in _VALID_BIGRAMS.values() for bg in values)
+
 
 def _cjk_ratio(text: str) -> float:
     if not text:
         return 0.0
-    return sum(1 for c in text if "\u4e00" <= c <= "\u9fff") / len(text)
+    return sum(n for c, n in Counter(text).items() if "\u4e00" <= c <= "\u9fff") / len(text)
 
 
 def _hangul_ratio(text: str) -> float:
     if not text:
         return 0.0
-    return sum(1 for c in text if "\uac00" <= c <= "\ud7a3") / len(text)
+    return sum(n for c, n in Counter(text).items() if "\uac00" <= c <= "\ud7a3") / len(text)
 
 
 def _skip_latin_mess_heuristics(text: str) -> bool:
@@ -45,11 +50,12 @@ def _is_printable(char: str) -> bool:
 
 def _latin_extended_fraction(text: str) -> float:
     """Share of Latin letters that use Latin Extended-A/B (Polish, Baltic, etc.)."""
-    latin = [c for c in text if c.isalpha() and ord(c) < 0x300]
-    if len(latin) < 4:
+    counts = Counter(text)
+    latin = sum(n for c, n in counts.items() if c.isalpha() and ord(c) < 0x300)
+    if latin < 4:
         return 0.0
-    ext = sum(1 for c in latin if 0x100 <= ord(c) <= 0x024F)
-    return ext / len(latin)
+    ext = sum(n for c, n in counts.items() if c.isalpha() and 0x100 <= ord(c) <= 0x024F)
+    return ext / latin
 
 
 def _bigram_mess(text: str, language_hint: Optional[str] = None) -> float:
@@ -57,13 +63,7 @@ def _bigram_mess(text: str, language_hint: Optional[str] = None) -> float:
     Fraction of Latin bigrams that are NOT in the valid set for any language.
     Lower = cleaner text.
     """
-    # Build combined valid bigram set
-    if language_hint and language_hint in BIGRAM_FREQUENCIES:
-        valid: set[str] = set(BIGRAM_FREQUENCIES[language_hint])
-    else:
-        valid = set()
-        for bg_list in BIGRAM_FREQUENCIES.values():
-            valid.update(bg_list)
+    valid = _VALID_BIGRAMS.get(language_hint or "", _ALL_BIGRAMS)
 
     if not valid:
         return 0.0
@@ -75,7 +75,8 @@ def _bigram_mess(text: str, language_hint: Optional[str] = None) -> float:
     if _latin_extended_fraction(text) > 0.22:
         return 0.0
 
-    latin = [c.lower() for c in text if c.isalpha() and ord(c) < 0x250]
+    table = {ord(c): c.lower() if c.isalpha() and ord(c) < 0x250 else None for c in set(text)}
+    latin = text.translate(table)
     if len(latin) < 8:
         return 0.0
 
@@ -89,7 +90,9 @@ def _unprintable_ratio(text: str) -> float:
     if n == 0:
         return 0.0
     bad = sum(
-        1 for c in text if not _is_printable(c) and c not in ("\n", "\r", "\t")
+        count
+        for c, count in Counter(text).items()
+        if not _is_printable(c) and c not in ("\n", "\r", "\t")
     )
     return bad / n
 
@@ -99,11 +102,9 @@ def _suspicious_ratio(text: str) -> float:
     if n == 0:
         return 0.0
     suspicious = sum(
-        1
-        for c in text
-        if (0xFFFD <= ord(c) <= 0xFFFD)  # replacement char
-        or (0xE000 <= ord(c) <= 0xF8FF)  # private use area
+        count for c, count in Counter(text).items() if c == "\ufffd" or "\ue000" <= c <= "\uf8ff"
     )
+
     return min(suspicious / n, 1.0)
 
 

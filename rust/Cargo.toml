@@ -1,14 +1,15 @@
 [package]
 name    = "bytesense-core"
-version = "0.1.2"
+version = "1.0.0"
 edition = "2021"
+rust-version = "1.88"
 
 [lib]
 name       = "bytesense_rust_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module"] }
+pyo3 = { version = "0.28.2", features = ["abi3-py39"] }
 
 [profile.release]
 opt-level     = 3

@@ -1,9 +1,10 @@
 """
 bytesense — Fast, accurate charset/encoding detection.
 
-Zero ML. Zero dependencies. Optional Rust acceleration.
+Full-input validation. Zero runtime dependencies. Optional Rust acceleration.
 Author: Oğuzhan Kır
 """
+
 from __future__ import annotations
 
 import logging

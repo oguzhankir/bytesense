@@ -29,23 +29,27 @@ class DetectionResult:
     Full result object returned by all bytesense detection functions.
 
     Attributes:
-        encoding:            IANA encoding name, e.g. ``"utf_8"``, ``"cp1252"``.
+        encoding:            Python codec name, e.g. ``"utf_8"``, ``"cp1252"``.
                              ``None`` if detection failed completely.
-        confidence:          Float 0.0–1.0.  1.0 = certain (BOM found or pure ASCII).
-        confidence_interval: (low, high) 95% CI tuple.
+        confidence:          Heuristic evidence score in 0.0–1.0, not a probability.
+        confidence_interval: Always None; heuristic scores have no statistical CI.
         language:            Human-readable language name, e.g. ``"French"``.
                              Empty string if not determined.
         alternatives:        Other plausible encodings, sorted by confidence descending.
         bom_detected:        ``True`` if a BOM/SIG was found.
-        chaos:               Mess ratio of the winning encoding.  0.0 = clean text.
-        coherence:           Language coherence score.  0.0 = no language match.
+        chaos:               Control-character ratio in the scoring sample.
+        coherence:           Character-pair support (legacy) or optional language support (UTF-8).
         why:                 Human-readable explanation of the detection decision.
-        byte_count:          Length of the input byte sequence.
+        byte_count:          Number of bytes accepted by this call or stream.
+        bytes_examined:      Bytes used for scoring or a direct fast-path decision.
+        bytes_validated:     Bytes strictly validated under the returned codec.
+        complete:            The input ended; False for previews/explicit budgets.
+        status:              matched, ambiguous, unknown, binary, or invalid.
     """
 
     encoding: Optional[str]
     confidence: float
-    confidence_interval: Tuple[float, float]
+    confidence_interval: Optional[Tuple[float, float]]
     language: str
     alternatives: List[EncodingAlternative]
     bom_detected: bool
@@ -53,6 +57,10 @@ class DetectionResult:
     coherence: float
     why: str
     byte_count: int
+    bytes_examined: int = 0
+    bytes_validated: int = 0
+    complete: bool = False
+    status: str = "unknown"
 
     # ------------------------------------------------------------------
     # chardet / charset-normalizer compatibility helpers
@@ -75,7 +83,7 @@ class DetectionResult:
         return {
             "encoding": self.encoding,
             "confidence": self.confidence,
-            "confidence_interval": list(self.confidence_interval),
+            "confidence_interval": None,
             "language": self.language,
             "alternatives": [a.to_dict() for a in self.alternatives],
             "bom_detected": self.bom_detected,
@@ -83,4 +91,8 @@ class DetectionResult:
             "coherence": self.coherence,
             "why": self.why,
             "byte_count": self.byte_count,
+            "bytes_examined": self.bytes_examined,
+            "bytes_validated": self.bytes_validated,
+            "complete": self.complete,
+            "status": self.status,
         }

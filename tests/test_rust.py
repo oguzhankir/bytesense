@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from bytesense._rust import is_rust_available
 
 pytestmark = pytest.mark.skipif(
     not is_rust_available(),
-    reason="Rust extension not compiled — run: maturin develop --release",
+    reason="Rust extension not compiled",
 )
 
 
@@ -47,36 +45,10 @@ def test_rust_utf8_check_invalid() -> None:
     assert 0.0 <= conf <= 1.0
 
 
-def test_rust_is_faster_than_python() -> None:
-    """Rust histogram must be at least 5x faster than pure Python on 100KB data."""
-    if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
-        pytest.skip("Performance assertions are too noisy on shared CI runners")
+def test_native_histogram_matches_independent_python_implementation() -> None:
+    from bytesense._rust_core import byte_histogram as rust_hist
 
-    import time
+    from bytesense.fingerprint import _byte_histogram_pure
 
-    from bytesense._rust_core import byte_histogram as rust_hist  # type: ignore[import-untyped]
-
-    from bytesense.fingerprint import byte_histogram as py_hist
-
-    data = bytes(range(256)) * 400  # 102 400 bytes
-
-    # Warmup
-    for _ in range(10):
-        rust_hist(data)
-        py_hist(data)
-
-    n = 200
-
-    t0 = time.perf_counter()
-    for _ in range(n):
-        rust_hist(data)
-    rust_time = time.perf_counter() - t0
-
-    t0 = time.perf_counter()
-    for _ in range(n):
-        py_hist(data)
-    py_time = time.perf_counter() - t0
-
-    speedup = py_time / rust_time
-    min_speedup = 5.0
-    assert speedup >= min_speedup, f"Expected >={min_speedup}x speedup, got {speedup:.1f}x"
+    for data in (b"", bytes(range(256)) * 400, b"x" * 100003):
+        assert rust_hist(data) == list(_byte_histogram_pure(data))
