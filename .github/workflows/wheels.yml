@@ -36,8 +36,8 @@ jobs:
         include:
           - {os: ubuntu-latest, arch: x86_64}
           - {os: ubuntu-24.04-arm, arch: aarch64}
-          - {os: macos-15-intel, arch: x86_64}
-          - {os: macos-latest, arch: arm64}
+          - {os: macos-15-intel, arch: x86_64, macos_target: '10.12'}
+          - {os: macos-latest, arch: arm64, macos_target: '11.0'}
           - {os: windows-latest, arch: AMD64}
     runs-on: ${{ matrix.os }}
     steps:
@@ -48,6 +48,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: pypa/cibuildwheel@v4.2.1
         env:
+          # Match wheel repair's target to the Rust standard library minimum.
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target || '11.0' }}
           CIBW_BUILD: 'cp39-*'
           CIBW_SKIP: '*-musllinux*'
           CIBW_ARCHS: ${{ matrix.arch }}

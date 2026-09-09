@@ -4,7 +4,6 @@ import codecs
 import io
 import subprocess
 import sys
-import tracemalloc
 
 import pytest
 from hypothesis import given, settings
@@ -105,6 +104,14 @@ def test_stream_lifecycle_and_budget() -> None:
 
 
 def test_oversized_stream_chunk_does_not_duplicate_it_in_memory() -> None:
+    # This allocation measurement is CPython-specific; byte preservation and
+    # spooling lifecycle are exercised on every interpreter separately.
+    import platform
+
+    if platform.python_implementation() != "CPython":
+        pytest.skip("tracemalloc allocation measurement requires CPython")
+    import tracemalloc
+
     data = b"a" * 8_000_000
     tracemalloc.start()
     try:

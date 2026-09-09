@@ -19,6 +19,8 @@ for path in sorted(Path(sys.argv[1]).iterdir()):
             names = archive.getnames()
             for required in (
                 "setup.py",
+                "scripts/evaluate_corpus.py",
+                "benchmarks/cn_official_manifest.json",
                 "rust/Cargo.toml",
                 "rust/Cargo.lock",
                 "rust/src/language.rs",
