@@ -30,6 +30,7 @@ def inventory(corpus: Path) -> tuple[list[dict], list[dict]]:
     ).strip()
     if actual != COMMIT:
         raise ValueError(f"Corpus must be checked out at {COMMIT}, got {actual}")
+    subprocess.run(["git", "-C", str(corpus), "diff", "--quiet", COMMIT, "--"], check=True)
     rows, excluded = [], []
     for path in sorted(corpus.glob("*/*")):
         if not path.is_file() or "-" not in path.parent.name:

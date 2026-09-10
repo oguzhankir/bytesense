@@ -10,7 +10,7 @@
 
 **bytesense** is a Python encoding detector for file imports, multilingual text pipelines and legacy data. It combines fast Unicode checks, compact character-pair statistics and optional Rust acceleration—with **zero runtime dependencies**.
 
-Every returned encoding strictly decodes the complete supplied input. Linguistic scoring uses a bounded sample; stream inputs spill to a temporary file after a configurable memory limit. Results tell you what was examined, what was validated, and whether the input ended.
+Final detection results strictly validate the selected encoding against the complete supplied input. Linguistic scoring uses a bounded sample; stream inputs spill to a temporary file after a configurable memory limit. Results tell you what was examined, what was validated, and whether the input ended.
 
 ```python
 from bytesense import from_bytes
@@ -80,13 +80,18 @@ The v1 engine replaces the previous collection of special-case ranking rules wit
 
 | Detector | Exact Unicode matches | Accuracy |
 |---|---:|---:|
-| **bytesense 1.0.0** | **1906 / 2078** | **91.72%** |
+| **bytesense 1.1.0** | **1907 / 2078** | **91.77%** |
+| bytesense 1.0.0 | 1906 / 2078 | 91.72% |
 | bytesense 0.1.2 | 883 / 2078 | 42.49% |
 | chardet 7.6.0 | 2060 / 2078 | 99.13% |
 | charset-normalizer 3.5.1 | 1679 / 2078 | 80.80% |
 | chardetng-py 0.3.5 | 776 / 2078 | 37.34% |
 
 See [benchmarks and methodology](https://oguzhankir.github.io/bytesense/benchmarks/) for measured comparisons with chardet, charset-normalizer and chardetng, including the cases where another detector wins. Timing reports distinguish default behavior from an additional full-decode validation step.
+
+**New in 1.1:** faster legacy scoring, canonical-Unicode evidence, and deeper full-input validation. On a new 432-case transfer check built from 28 UDHR translations, exact recovery increased from **374 to 394 cases**; charset-normalizer recovered 381 and chardet 422. These are correlated variants of one translated document, not a universal accuracy ranking. Chardet remains more accurate on both reported corpora.
+
+The measured Turkish CP1254 and Japanese EUC-JP workloads run approximately **2.8× faster than bytesense 1.0** with the native backend. See the benchmark table for absolute timings and where competitors remain faster.
 
 ## Upgrading from 0.x
 

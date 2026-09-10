@@ -50,8 +50,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rounds", type=int, default=64)
+    parser.add_argument(
+        "--engine",
+        action="append",
+        choices=["bytesense", "chardet", "charset-normalizer", "chardetng-py"],
+    )
     args = parser.parse_args()
-    names = ["bytesense", "chardet", "charset-normalizer", "chardetng-py"]
+    if args.rounds < 1:
+        parser.error("--rounds must be positive")
+    names = args.engine or ["bytesense", "chardet", "charset-normalizer", "chardetng-py"]
     detectors = engines(names)
     rows = []
     expected = {

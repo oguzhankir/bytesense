@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.0
+
+### Faster legacy detection
+- Cache Unicode scalar properties in a fixed 64 KiB atomic table; remove per-character property hash lookups and read locks.
+- Use a bounded 512 KiB native lookup table for Latin/ASCII model pairs, with sparse lookup for other scripts.
+- Prune pair scoring only when an optimistic evidence bound proves that a candidate cannot qualify. Retain matching Python/native decisions.
+- Normalize and deduplicate the built-in codec catalog lazily once; caller-supplied codecs are still validated on each call.
+
+### Correctness
+- Normalize scoring input to NFC and stop penalizing combining marks as symbol noise. Original bytes and decoded text are never normalized or rewritten.
+- Reach all statistically eligible candidates during full-input validation instead of stopping at the six display hypotheses. Public alternatives remain limited to five.
+- Recover plausible BOM-less UTF-16 with NULs in both lanes before declaring binary content, subject to strict full-input validation and caller filters.
+- Recognize ISO-2022 shift controls and UTF-7 Unicode spacing/format characters as text syntax.
+
+### Verification
+- Add cache-boundary, concurrent cold-cache, dense/sparse pair parity, pruning-bound, canonical-equivalence and validation-depth regressions.
+- Add a pinned 28-document UDHR transfer evaluation, with exact Unicode comparisons, recorded exclusions and separate legacy/Unicode counts.
+- Add single-engine benchmark runs for before/after comparisons. Model weights and public API signatures are unchanged.
+
+See the benchmark documentation for measured gains and remaining limitations.
+
 
 ## 1.0.0
 

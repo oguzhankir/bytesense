@@ -21,6 +21,8 @@
 
 Custom codecs must be explicitly included or hinted and provide a bytes-to-text incremental decoder through Python's codec registry. Binary transforms such as base64 and hex are rejected. Unknown codec names raise `LookupError`.
 
+Statistical scoring normalizes text to NFC internally; detection never modifies the supplied bytes or the text decoded by your application. Candidates that cannot meet the evidence threshold may skip pair scoring using a conservative upper bound. Full validation considers every eligible candidate, not only the five alternatives shown in the result.
+
 `from_path(path, **kwargs)` opens a binary file. `from_fp(fp, **kwargs)` reads from the current position in bounded chunks and leaves the caller's file open. Both consume to EOF and accept detection options plus the stream's `memory_limit`.
 
 `is_binary(data, **kwargs)` reports positive binary evidence (known signatures or excessive control bytes), not merely an unknown encoding. It is a heuristic classifier.
@@ -61,7 +63,7 @@ Custom codecs must be explicitly included or hinted and provide a bytes-to-text 
 
 `detect_stream(chunks, *, stop_confidence=0.97, max_bytes=None, early_stop=False, **kwargs)` consumes to EOF by default. Explicit stopping returns `complete=False`. Oversized chunks are sliced before acceptance when `max_bytes` is set; the unused part has already been yielded by the source and cannot be restored. The accepted prefix may be fully validated while the source itself is incomplete.
 
-Memory is bounded by the configured spool limit plus sample/decoder buffers and static model tables. Temporary disk usage grows with accepted input size. Very small chunks may create more Python call overhead.
+The spool is bounded by `memory_limit`; sample/decoder buffers and static model tables are additional. Stateful codec decoder buffers can depend on encoded shift-sequence length, so this is not a hard process-RSS limit. The native scorer's fixed tables use 64 KiB for BMP properties and 512 KiB for Latin pair weights; other model data is stored separately. Temporary disk usage grows with accepted input size. Very small chunks may create more Python call overhead.
 
 ## Repair and segmentation
 
