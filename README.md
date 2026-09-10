@@ -74,6 +74,14 @@ cat report.csv | bytesense --minimal -
 
 The CLI exits **0** when every input has an encoding, **1** for read failures or unknown/binary inputs, and **2** for invalid arguments. JSON goes to stdout; errors go to stderr.
 
+## Used by
+
+[ingest-sentry](https://github.com/oguzhankir/ingest-sentry) uses bytesense for encoding
+detection and full-snapshot validation before CSV/TSV imports. It adds import contracts,
+safe UTF-8 normalization, string-preserving pandas/Polars adapters, and a GitHub Action.
+Built by the same maintainer; an independent project, not affiliated with Sentry.
+The repository is currently private, so viewing it requires access.
+
 ## Measured accuracy and performance
 
 The v1 engine replaces the previous collection of special-case ranking rules with a small, reproducibly generated statistical model. The evaluation separates development documents from held-out documents, grouping identical decoded text across encodings. Accuracy means **exact Unicode equality**, not just a compatible codec name.
