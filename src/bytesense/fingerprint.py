@@ -6,9 +6,12 @@ The central insight: every encoding has a characteristic byte-frequency
 byte histogram and pre-computed encoding fingerprints, we can shortlist
 likely encodings in O(n) time without any decoding.
 """
+
 from __future__ import annotations
 
 import array
+from collections import Counter
+from functools import lru_cache
 from typing import List, Tuple
 
 # ---------------------------------------------------------------------------
@@ -18,23 +21,9 @@ from typing import List, Tuple
 
 def _byte_histogram_pure(data: bytes) -> array.array:
     """Pure-Python byte histogram (also used when the Rust extension is absent)."""
-    hist: array.array = array.array("L", [0] * 256)
-    # Process 8 bytes at a time to hint CPython for loop unrolling
-    i = 0
-    n = len(data)
-    while i + 7 < n:
-        hist[data[i]] += 1
-        hist[data[i + 1]] += 1
-        hist[data[i + 2]] += 1
-        hist[data[i + 3]] += 1
-        hist[data[i + 4]] += 1
-        hist[data[i + 5]] += 1
-        hist[data[i + 6]] += 1
-        hist[data[i + 7]] += 1
-        i += 8
-    while i < n:
-        hist[data[i]] += 1
-        i += 1
+    hist: array.array = array.array("Q", [0] * 256)
+    for value, count in Counter(data).items():
+        hist[value] = count
     return hist
 
 
@@ -127,37 +116,20 @@ def detect_null_pattern(data: bytes) -> str | None:
     if len(data) < 8:
         return None
 
-    sample = data[: min(512, len(data))]
-    n = len(sample)
-
-    # UTF-32 BE: \x00\x00\x00X
-    be32 = sum(
-        1
-        for i in range(0, n - 3, 4)
-        if sample[i] == 0 and sample[i + 1] == 0 and sample[i + 2] == 0 and sample[i + 3] != 0
-    )
-    if be32 > n // 8:
+    sample = data[:512]
+    # Distinguish byte lanes, including non-Latin UTF-16 and supplementary UTF-32.
+    lanes = [sample[i::4] for i in range(4)]
+    zero = [lane.count(0) / len(lane) for lane in lanes]
+    if zero[0] > 0.8 and zero[1] > 0.8 and zero[3] < 0.5:
         return "utf_32_be"
-
-    # UTF-32 LE: X\x00\x00\x00
-    le32 = sum(
-        1
-        for i in range(0, n - 3, 4)
-        if sample[i] != 0 and sample[i + 1] == 0 and sample[i + 2] == 0 and sample[i + 3] == 0
-    )
-    if le32 > n // 8:
+    if zero[2] > 0.8 and zero[3] > 0.8 and zero[0] < 0.5:
         return "utf_32_le"
-
-    # UTF-16 BE: \x00X
-    be16 = sum(1 for i in range(0, n - 1, 2) if sample[i] == 0 and sample[i + 1] != 0)
-    if be16 > n // 4:
+    even, odd = sample[0::2], sample[1::2]
+    ze, zo = even.count(0) / len(even), odd.count(0) / len(odd)
+    if ze >= 0.08 and zo < ze * 0.1:
         return "utf_16_be"
-
-    # UTF-16 LE: X\x00
-    le16 = sum(1 for i in range(0, n - 1, 2) if sample[i] != 0 and sample[i + 1] == 0)
-    if le16 > n // 4:
+    if zo >= 0.08 and ze < zo * 0.1:
         return "utf_16_le"
-
     return None
 
 
@@ -181,18 +153,8 @@ def shortlist_encodings(
     byte-distribution similarity, returning the top_n most likely candidates.
     O(k) where k = number of fingerprints (~99).  No decoding performed.
     """
-    try:
-        from .data.fingerprints import ENCODING_FINGERPRINTS
-    except ImportError:
-        # Fingerprints not generated yet — return all encodings unranked
-        from .constant import ALL_ENCODINGS
+    scores = list(_scores_for_hist(hist).items())
 
-        return [(enc, 0.5) for enc in ALL_ENCODINGS[:top_n]]
-
-    ratios = histogram_to_ratios(hist, total)
-    scores: List[Tuple[str, float]] = [
-        (enc, _cosine_similarity(ratios, fp)) for enc, fp in ENCODING_FINGERPRINTS.items()
-    ]
     scores.sort(key=lambda x: x[1], reverse=True)
     return scores[:top_n]
 
@@ -218,6 +180,43 @@ def fingerprint_cosine_for_encoding(data: bytes, encoding: str) -> float:
     return _cosine_similarity(ratios, fp)
 
 
+@lru_cache(maxsize=1)
+def _fingerprint_groups() -> list[tuple[list[str], tuple[float, ...]]]:
+    from .data.fingerprints import ENCODING_FINGERPRINTS
+
+    groups: dict[tuple[float, ...], list[str]] = {}
+    for encoding, raw_vector in ENCODING_FINGERPRINTS.items():
+        groups.setdefault(tuple(raw_vector), []).append(encoding)
+    result = []
+    for vector, names in groups.items():
+        norm = sum(v * v for v in vector) ** 0.5
+        result.append((names, tuple(v / norm if norm else 0.0 for v in vector)))
+    return result
+
+
+# Static profiles only: identical vectors share one dot product.
+
+
+def _scores_for_hist(hist: array.array) -> dict[str, float]:
+    norm = sum(n * n for n in hist) ** 0.5
+    if not norm:
+        return {name: 0.0 for names, _ in _fingerprint_groups() for name in names}
+    observed = [(i, n / norm) for i, n in enumerate(hist) if n]
+    scores: dict[str, float] = {}
+    for names, vector in _fingerprint_groups():
+        score = sum(n * vector[i] for i, n in observed)
+        scores.update((name, score) for name in names)
+    # Restore table order to preserve stable ties.
+    from .data.fingerprints import ENCODING_FINGERPRINTS
+
+    return {name: scores[name] for name in ENCODING_FINGERPRINTS}
+
+
+def fingerprint_scores(data: bytes) -> dict[str, float]:
+    """Score distinct static profiles from one sparse byte histogram."""
+    return _scores_for_hist(byte_histogram(data))
+
+
 from ._rust import (  # noqa: E402 — intentional late import
     _RUST_AVAILABLE,
     rust_byte_histogram,
@@ -228,7 +227,7 @@ from ._rust import (  # noqa: E402 — intentional late import
 def byte_histogram(data: bytes) -> array.array:
     """
     Compute byte frequency histogram.
-    Returns a 256-element ``array.array("L", ...)`` of occurrence counts.
+    Returns a 256-element ``array.array("Q", ...)`` of occurrence counts.
     O(n), single pass. Uses Rust when available.
     """
     if _RUST_AVAILABLE:

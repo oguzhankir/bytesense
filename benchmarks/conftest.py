@@ -8,8 +8,10 @@ Both libraries are tested on exactly the same data.
 2) Official charset-normalizer `data/` files (same ground truth as their
    tests/test_full_detection.py), fetched via scripts/fetch_cn_benchmark_samples.py.
 """
+
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import List, Tuple
@@ -39,24 +41,28 @@ _RAW: List[Tuple[str, str | bytes, str]] = [
     ),
     (
         "utf8_french_long",
-        ("Bonjour le monde! J\u2019aime les \u00e9toiles. " "Le fran\u00e7ais est magnifique. " * 20),
+        ("Bonjour le monde! J\u2019aime les \u00e9toiles. Le fran\u00e7ais est magnifique. " * 20),
         "utf_8",
     ),
     (
         "utf8_german",
-        ("Sch\u00f6nen Gru\u00df aus Deutschland! " "\u00dcber die \u00e4sthetischen Werte. " * 15),
+        ("Sch\u00f6nen Gru\u00df aus Deutschland! \u00dcber die \u00e4sthetischen Werte. " * 15),
         "utf_8",
     ),
     (
         "utf8_spanish",
-        ("El r\u00e1pido zorro marr\u00f3n salta sobre el perro perezoso. "
-         "La ciudad de M\u00e9xico. " * 15),
+        (
+            "El r\u00e1pido zorro marr\u00f3n salta sobre el perro perezoso. "
+            "La ciudad de M\u00e9xico. " * 15
+        ),
         "utf_8",
     ),
     (
         "utf8_russian",
-        ("\u041f\u0440\u0438\u0432\u0435\u0442 \u043c\u0438\u0440! "
-         "\u0420\u0443\u0441\u0441\u043a\u0438\u0439 \u044f\u0437\u044b\u043a. " * 20),
+        (
+            "\u041f\u0440\u0438\u0432\u0435\u0442 \u043c\u0438\u0440! "
+            "\u0420\u0443\u0441\u0441\u043a\u0438\u0439 \u044f\u0437\u044b\u043a. " * 20
+        ),
         "utf_8",
     ),
     (
@@ -71,7 +77,8 @@ _RAW: List[Tuple[str, str | bytes, str]] = [
     ),
     (
         "utf8_arabic",
-        "\u0627\u0644\u0644\u063a\u0629 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u062c\u0645\u064a\u0644\u0629." * 20,
+        "\u0627\u0644\u0644\u063a\u0629 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u062c\u0645\u064a\u0644\u0629."
+        * 20,
         "utf_8",
     ),
     (
@@ -97,19 +104,23 @@ _RAW: List[Tuple[str, str | bytes, str]] = [
     ),
     (
         "utf8_greek",
-        "\u0397 \u03b3\u03c1\u03ae\u03b3\u03bf\u03c1\u03b7 \u03ba\u03b1\u03c6\u03ad \u03ba\u03b1\u03c4\u03b1\u03ba\u03bb\u03cd\u03b6\u03b5\u03b9 \u03c4\u03bf\u03bd \u03c4\u03b5\u03bc\u03bd\u03cc \u03c3\u03ba\u03cd\u03bb\u03bf. " * 18,
+        "\u0397 \u03b3\u03c1\u03ae\u03b3\u03bf\u03c1\u03b7 \u03ba\u03b1\u03c6\u03ad \u03ba\u03b1\u03c4\u03b1\u03ba\u03bb\u03cd\u03b6\u03b5\u03b9 \u03c4\u03bf\u03bd \u03c4\u03b5\u03bc\u03bd\u03cc \u03c3\u03ba\u03cd\u03bb\u03bf. "
+        * 18,
         "utf_8",
     ),
     (
         "utf8_hebrew",
-        "\u05d4\u05e9\u05d5\u05e2\u05dc \u05d4\u05d7\u05d5\u05dd \u05e7\u05d5\u05e4\u05e5 \u05de\u05e2\u05dc \u05d4\u05db\u05dc\u05d1 \u05d4\u05e2\u05e6\u05dc. " * 22,
+        "\u05d4\u05e9\u05d5\u05e2\u05dc \u05d4\u05d7\u05d5\u05dd \u05e7\u05d5\u05e4\u05e5 \u05de\u05e2\u05dc \u05d4\u05db\u05dc\u05d1 \u05d4\u05e2\u05e6\u05dc. "
+        * 22,
         "utf_8",
     ),
     # --- Cyrillic ---
     (
         "cp1251_russian",
-        ("\u041f\u0440\u0438\u0432\u0435\u0442 \u043c\u0438\u0440! "
-         "\u042d\u0442\u043e \u0442\u0435\u043a\u0441\u0442. " * 20),
+        (
+            "\u041f\u0440\u0438\u0432\u0435\u0442 \u043c\u0438\u0440! "
+            "\u042d\u0442\u043e \u0442\u0435\u043a\u0441\u0442. " * 20
+        ),
         "cp1251",
     ),
     # --- CJK (encoded) ---
@@ -117,15 +128,16 @@ _RAW: List[Tuple[str, str | bytes, str]] = [
     ("euc_jp_japanese", ("\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8\u3002" * 30), "euc_jp"),
     (
         "utf8_korean",
-        "\uc774 \ube60\ub978 \ub2ec\ucf64 \uac1c\ub294 \uac8c\uc73c\ub978 \uac1c \uc704\ub97c \ub6f0\uc5b4\ub118\uc2b5\ub2c8\ub2e4. " * 25,
+        "\uc774 \ube60\ub978 \ub2ec\ucf64 \uac1c\ub294 \uac8c\uc73c\ub978 \uac1c \uc704\ub97c \ub6f0\uc5b4\ub118\uc2b5\ub2c8\ub2e4. "
+        * 25,
         "utf_8",
     ),
     # --- UTF-16 ---
     ("utf16_le", "Hello UTF-16 LE encoding test! " * 10, "utf_16_le"),
     # --- Large file (non-ASCII tail so detector expects UTF-8, not ASCII) ---
     (
-        "large_utf8_1mb",
-        ("The quick brown fox jumps over the lazy dog. " * 5000) + "café",
+        "large_utf8_1mib",
+        ("a" * (1_048_576 - len("café".encode()))) + "café",
         "utf_8",
     ),
 ]
@@ -148,7 +160,7 @@ def _build_dataset() -> List[Tuple[str, bytes, str]]:
                     data = text.encode("utf-16-le")
                 else:
                     codec = enc.replace("_", "-") if enc != "utf_8_sig" else "utf-8-sig"
-                    data = text.encode(codec, errors="ignore")
+                    data = text.encode(codec, errors="strict")
             except (LookupError, UnicodeEncodeError):
                 continue
         if len(data) >= 16:
@@ -171,8 +183,12 @@ def _load_charset_normalizer_official_files() -> List[Tuple[str, bytes, str]]:
         enc = entry["encoding"]
         path = _CN_DIR / fname
         if not path.is_file():
-            continue
+            raise RuntimeError(
+                f"Missing benchmark sample {fname}; run scripts/fetch_cn_benchmark_samples.py"
+            )
         data = path.read_bytes()
+        if hashlib.sha256(data).hexdigest() != entry["sha256"]:
+            raise RuntimeError(f"Benchmark hash mismatch: {fname}")
         if len(data) < 16:
             continue
         safe = fname.replace(".", "_")

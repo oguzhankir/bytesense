@@ -1,442 +1,26 @@
-"""
-Public detection API.
+"""Encoding detection with bounded statistical scoring and complete decode validation."""
 
-All public functions live here.  The internal pipeline:
-
-  1. Validate input type
-  2. BOM/SIG detection          → instant, certainty = 1.0
-  3. ASCII-only check           → O(n), certainty = 1.0
-  4. UTF-8 validity check       → O(n), high certainty
-  5. Null-pattern (UTF-16/32)   → O(n)
-  6. Byte fingerprint shortlist → O(n + k)
-  7. Decode → mess → coherence  → only for ≤40 candidates (see CandidateSelector cap)
-  8. Rank and return
-"""
 from __future__ import annotations
 
-import logging
+import codecs
+import re
+from dataclasses import replace
 from os import PathLike
 from typing import Any, BinaryIO, List, Optional
 
 from .candidate import CandidateSelector
 from .coherence import detect_language
-from .constant import LANGUAGE_ENCODINGS, OPTIMAL_SAMPLE, SIMILAR_ENCODINGS, TOO_LARGE
-from .fingerprint import (
-    cp1252_zone_ratio,
-    detect_null_pattern,
-    fingerprint_cosine_for_encoding,
-)
-from .heuristics import (
-    cp866_vs_cp1251_hint,
-    hebrew_sbcs_likelihood,
-    japanese_mbcs_bias,
-)
-from .mess import sliding_window_mess
+from .constant import ALL_ENCODINGS
+from .fingerprint import detect_null_pattern
+from .hints import hint_from_content
 from .models import DetectionResult, EncodingAlternative
-
-logger = logging.getLogger("bytesense")
-
-
-def _language_encoding_alignment(language: str, encoding: str) -> float:
-    """Return 1.0 if `encoding` is typical for detected `language`, else 0.0."""
-    if not language:
-        return 0.0
-    encs = LANGUAGE_ENCODINGS.get(language, [])
-    return 1.0 if encoding in encs else 0.0
-
-
-def _latin_letters_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if c.isalpha() and ord(c) < 0x0300) / n
-
-
-def _cyrillic_letters_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\u0400" <= c <= "\u04ff" or "\u0500" <= c <= "\u052f") / n
-
-
-def _arabic_letters_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\u0600" <= c <= "\u06ff" or "\u0750" <= c <= "\u077f") / n
-
-
-def _greek_letters_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\u0370" <= c <= "\u03ff") / n
-
-
-def _cjk_ideographs_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\u4e00" <= c <= "\u9fff") / n
-
-
-def _hangul_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\uac00" <= c <= "\ud7a3") / n
-
-
-def _hebrew_letters_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\u0590" <= c <= "\u05ff") / n
-
-
-def _thai_letters_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\u0e00" <= c <= "\u0e7f") / n
-
-
-def _kana_ratio(decoded: str) -> float:
-    n = len(decoded)
-    if n == 0:
-        return 0.0
-    return sum(1 for c in decoded if "\u3040" <= c <= "\u30ff" or "\u31f0" <= c <= "\u31ff") / n
-
-
-def _turkish_unicode_score(decoded: str) -> float:
-    """İ/ı/ş/ğ etc. after a correct Turkish Windows decode — not present in cp1250 mojibake."""
-    if not decoded:
-        return 0.0
-    hits = sum(
-        1
-        for c in decoded
-        if c in "\u0130\u0131\u011e\u011f\u015e\u015f\u00dc\u00fc\u00d6\u00f6\u00c7\u00e7"
-    )
-    return hits / min(len(decoded), 2000)
-
-
-def _baltic_latin_score(decoded: str) -> float:
-    """ą č ę ė į š ų ū ž — typical in Lithuanian cp1257 text."""
-    if not decoded:
-        return 0.0
-    hits = sum(
-        1
-        for c in decoded
-        if c in "\u0105\u010d\u0119\u0117\u012f\u0161\u0173\u016b\u017e\u010c\u012e\u0160\u017d"
-    )
-    return hits / min(len(decoded), 2000)
-
-
-def _emoji_zwj_rich_text(text: str) -> bool:
-    """Valid UTF-8 with ZWJ / emoji clusters can trip Latin-centric mess heuristics."""
-    if not text:
-        return False
-    if "\u200d" in text:
-        return True
-    ext = sum(1 for c in text if ord(c) >= 0x1F300)
-    return ext / max(len(text), 1) >= 0.02
-
-
-def _maybe_promote_korean_mbcs(
-    rows: List[tuple[str, float, float, str, int, str, float]],
-    sample_data: bytes,
-) -> List[tuple[str, float, float, str, int, str, float]]:
-    """
-    If a Windows/Latin/Cyrillic SBCS wins but decodes to no Hangul while
-    cp949/euc_kr decodes the same bytes to strong Hangul text, prefer the
-    Korean multibyte path.
-    """
-    if not rows:
-        return rows
-    _, _, _, _, _, text0, _ = rows[0]
-    if _hangul_ratio(text0) > 0.12:
-        return rows
-    for row in rows:
-        enc, _, _, _, _, _, _ = row
-        if enc not in ("cp949", "euc_kr", "johab"):
-            continue
-        try:
-            alt = sample_data.decode(enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-        if _hangul_ratio(alt) > 0.35:
-            return [row] + [r for r in rows if r is not row]
-    return rows
-
-
-def _maybe_promote_hebrew_sbcs(
-    rows: List[tuple[str, float, float, str, int, str, float]],
-    sample_data: bytes,
-) -> List[tuple[str, float, float, str, int, str, float]]:
-    from .heuristics import cp866_vs_cp1251_hint, koi8_byte_hint
-
-    if cp866_vs_cp1251_hint(sample_data) is not None or koi8_byte_hint(sample_data):
-        return rows
-    if not rows:
-        return rows
-    enc0, _, _, _, _, t0, _ = rows[0]
-    if enc0 in ("cp1255", "iso8859_8"):
-        return rows
-    if _hebrew_letters_ratio(t0) > 0.12:
-        return rows
-    best: Optional[tuple[str, float, float, str, int, str, float]] = None
-    best_h = -1.0
-    for row in rows:
-        enc = row[0]
-        if enc not in ("cp1255", "iso8859_8"):
-            continue
-        try:
-            alt = sample_data.decode(enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-        h = _hebrew_letters_ratio(alt)
-        if h > best_h:
-            best_h = h
-            best = row
-    if best is None or best_h < 0.20:
-        return rows
-    if best_h > _hebrew_letters_ratio(t0) + 0.10:
-        return [best] + [r for r in rows if r is not best]
-    return rows
-
-
-def _maybe_promote_thai_mbcs(
-    rows: List[tuple[str, float, float, str, int, str, float]],
-    sample_data: bytes,
-) -> List[tuple[str, float, float, str, int, str, float]]:
-    from .heuristics import thai_tis620_likelihood
-
-    if not rows:
-        return rows
-    if thai_tis620_likelihood(sample_data) < 0.92:
-        return rows
-    if hebrew_sbcs_likelihood(sample_data) >= 0.55:
-        return rows
-    _, _, _, _, _, t0, _ = rows[0]
-    if _thai_letters_ratio(t0) > 0.12:
-        return rows
-    best: Optional[tuple[str, float, float, str, int, str, float]] = None
-    best_th = -1.0
-    for row in rows:
-        enc = row[0]
-        if enc not in ("tis_620", "iso8859_11"):
-            continue
-        try:
-            alt = sample_data.decode(enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-        th = _thai_letters_ratio(alt)
-        if th > best_th:
-            best_th = th
-            best = row
-    if best is None or best_th < 0.35:
-        return rows
-    if best_th > _thai_letters_ratio(t0) + 0.10:
-        return [best] + [r for r in rows if r is not best]
-    return rows
-
-
-def _maybe_promote_japanese_mbcs(
-    rows: List[tuple[str, float, float, str, int, str, float]],
-    sample_data: bytes,
-) -> List[tuple[str, float, float, str, int, str, float]]:
-    jb = japanese_mbcs_bias(sample_data)
-    if jb is None or not rows:
-        return rows
-    # Hangul-heavy bytes decode as plausible EUC-JP but are Korean — only when jb says euc_jp.
-    if jb == "euc_jp":
-        try:
-            hang_cp949 = _hangul_ratio(sample_data.decode("cp949"))
-        except (UnicodeDecodeError, LookupError):
-            hang_cp949 = 0.0
-        try:
-            hang_ej = _hangul_ratio(sample_data.decode("euc_jp"))
-        except (UnicodeDecodeError, LookupError):
-            hang_ej = 0.0
-        if hang_cp949 > 0.38 and hang_ej < 0.06:
-            return rows
-    enc0, _, _, _, _, t0, _ = rows[0]
-    if enc0 in ("shift_jis", "euc_jp", "cp932", "iso2022_jp", "iso2022_jp_1", "iso2022_jp_2"):
-        return rows
-    want = ("shift_jis", "cp932") if jb == "shift_jis" else ("euc_jp", "iso2022_jp")
-    best: Optional[tuple[str, float, float, str, int, str, float]] = None
-    best_j = -1.0
-    for row in rows:
-        enc = row[0]
-        if enc not in want:
-            continue
-        try:
-            alt = sample_data.decode(enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-        j = _kana_ratio(alt) + _cjk_ideographs_ratio(alt)
-        if j > best_j:
-            best_j = j
-            best = row
-    if best is None or best_j < 0.08:
-        return rows
-    lead_j = _kana_ratio(t0) + _cjk_ideographs_ratio(t0)
-    if lead_j > best_j + 0.10:
-        return rows
-    return [best] + [r for r in rows if r is not best]
-
-
-def _maybe_promote_cjk_over_cp949(
-    rows: List[tuple[str, float, float, str, int, str, float]],
-    sample_data: bytes,
-) -> List[tuple[str, float, float, str, int, str, float]]:
-    """
-    Chinese Big5 / GB18030 bytes often decode as pure Hangul under cp949; prefer Han decodes.
-    """
-    if not rows or rows[0][0] != "cp949":
-        return rows
-    try:
-        t949 = sample_data.decode("cp949")
-    except (UnicodeDecodeError, LookupError):
-        return rows
-    hang9 = _hangul_ratio(t949)
-    cjk9 = _cjk_ideographs_ratio(t949)
-    if hang9 > 0.88 and cjk9 < 0.07:
-        try:
-            cjk5 = _cjk_ideographs_ratio(sample_data.decode("big5"))
-        except (UnicodeDecodeError, LookupError):
-            cjk5 = 0.0
-        if cjk5 > 0.42:
-            row_big5 = next((r for r in rows if r[0] == "big5"), None)
-            if row_big5 is not None:
-                return [row_big5] + [r for r in rows if r is not row_big5]
-    try:
-        sample_data.decode("big5")
-        big5_ok = True
-    except (UnicodeDecodeError, LookupError):
-        big5_ok = False
-    if not big5_ok:
-        try:
-            cjk18 = _cjk_ideographs_ratio(sample_data.decode("gb18030"))
-        except (UnicodeDecodeError, LookupError):
-            return rows
-        if cjk18 > 0.42 and hang9 > 0.35 and cjk9 > 0.18:
-            row_gb = next((r for r in rows if r[0] == "gb18030"), None)
-            if row_gb is not None:
-                return [row_gb] + [r for r in rows if r is not row_gb]
-    return rows
+from .scoring import text_quality
 
 
 def _looks_like_iso2022(data: bytes) -> bool:
-    """
-    7-bit ISO-2022 (JP/KR) uses ESC sequences; without this, pure-ASCII+ESC
-    payloads are misclassified as plain ASCII.
-    """
     if b"\x1b" not in data:
         return False
-    # Common ISO-2022 lead-ins (JP: ESC $ B / ESC ( B, etc.)
-    return (
-        b"\x1b\x24" in data
-        or b"\x1b\x28" in data
-        or b"\x1b\x29" in data
-        or b"\x1b\x2e" in data
-    )
-
-
-def _encoding_script_bonus(encoding: str, decoded: str) -> float:
-    """
-    Score how well the decoded Unicode matches scripts typically produced by `encoding`.
-    Used to break ties (e.g. cp1252 vs cp1251 on Latin text, mac_cyrillic vs iso8859_7 on Russian).
-    Rough range about -0.5 .. +1.0.
-    """
-    cyr = _cyrillic_letters_ratio(decoded)
-    lat = _latin_letters_ratio(decoded)
-    arab = _arabic_letters_ratio(decoded)
-    gre = _greek_letters_ratio(decoded)
-    cjk = _cjk_ideographs_ratio(decoded)
-    hang = _hangul_ratio(decoded)
-    heb = _hebrew_letters_ratio(decoded)
-    thai = _thai_letters_ratio(decoded)
-
-    score = 0.0
-
-    if encoding in ("cp1251", "koi8_r", "koi8_u", "cp866", "mac_cyrillic", "iso8859_5", "ptcp154", "kz1048"):
-        score += min(1.0, cyr * 1.1)
-        if lat > 0.2 and cyr < 0.06:
-            score -= 0.55
-        kn = _kana_ratio(decoded)
-        if (kn > 0.045 or cjk > 0.14) and cyr < 0.38:
-            score -= 0.95
-    if encoding == "mac_cyrillic" and cyr < 0.12 and lat > 0.22:
-        score -= 0.72
-    if encoding == "mac_cyrillic" and thai > 0.14 and cyr < 0.15:
-        score -= 0.88
-    if encoding in ("cp1252", "cp1250", "cp1254", "cp1258", "latin_1", "iso8859_15", "iso8859_9"):
-        score += min(0.9, lat * 0.45)
-        if cyr > 0.12 and lat < 0.1:
-            score -= 0.15
-    tu = _turkish_unicode_score(decoded)
-    if encoding in ("cp1254", "iso8859_9"):
-        score += min(0.45, tu * 12.0)
-    if encoding in ("cp1250", "cp1252", "latin_1") and tu > 0.004:
-        score -= min(0.38, tu * 7.0)
-    if encoding in ("cp1256", "iso8859_6"):
-        score += min(1.0, arab * 1.0)
-        if arab < 0.08 and cyr > 0.05:
-            score -= 0.35
-    if encoding in ("tis_620", "iso8859_11"):
-        score += min(1.0, thai * 1.05)
-    if encoding in ("cp1257",):
-        score += min(0.85, lat * 0.42)
-        bal = _baltic_latin_score(decoded)
-        if bal > 0.004:
-            score += min(0.42, bal * 20.0)
-    if encoding in ("cp1255", "iso8859_8"):
-        score += min(1.0, heb * 1.05)
-    if encoding in ("cp1253", "iso8859_7"):
-        score += min(1.0, gre * 1.0)
-        if cyr > 0.12 and gre < 0.12:
-            score -= 0.55
-    if encoding in ("big5", "big5hkscs", "gb2312", "gbk", "gb18030", "hz"):
-        score += min(1.0, cjk * 0.85 + hang * 0.1)
-    if encoding in ("cp949", "euc_kr", "johab", "iso2022_kr"):
-        score += min(1.0, hang * 0.85 + cjk * 0.15)
-        # GB/Big5 bytes mis-decoded as Hangul+Han (not typical pure Korean chat).
-        if hang > 0.22 and cjk > 0.22:
-            score -= 0.48
-    if encoding in ("shift_jis", "euc_jp", "cp932", "iso2022_jp", "iso2022_jp_1", "iso2022_jp_2"):
-        kana = sum(
-            1 for c in decoded if "\u3040" <= c <= "\u30ff" or "\u31f0" <= c <= "\u31ff"
-        ) / max(len(decoded), 1)
-        score += min(1.0, kana * 0.5 + cjk * 0.35)
-        if hang > 0.2 and kana < 0.12:
-            score -= 0.55
-        # Han text without kana is often Chinese/Korean mis-tagged as Japanese
-        if cjk > 0.22 and kana < 0.06:
-            score -= 0.52
-
-    return max(-0.55, min(1.0, score))
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _confidence(chaos: float, coherence: float, bom: bool) -> float:
-    if bom:
-        return 1.0
-    base = 1.0 - chaos
-    boost = coherence * 0.12
-    return min(round(base + boost, 4), 1.0)
-
-
-def _ci(conf: float) -> tuple[float, float]:
-    uncertainty = (1.0 - conf) * 0.45
-    return (
-        round(max(0.0, conf - uncertainty), 4),
-        round(min(1.0, conf + uncertainty), 4),
-    )
+    return any(marker in data for marker in (b"\x1b$", b"\x1b(", b"\x1b)", b"\x1b."))
 
 
 def _make_result(
@@ -448,13 +32,12 @@ def _make_result(
     alternatives: List[EncodingAlternative],
     why: str,
     byte_count: int,
-    confidence: Optional[float] = None,
+    confidence: float = 0.0,
 ) -> DetectionResult:
-    conf = confidence if confidence is not None else _confidence(chaos, coherence, bom_detected)
     return DetectionResult(
         encoding=encoding,
-        confidence=conf,
-        confidence_interval=_ci(conf),
+        confidence=confidence,
+        confidence_interval=None,
         language=language,
         alternatives=alternatives,
         bom_detected=bom_detected,
@@ -465,9 +48,219 @@ def _make_result(
     )
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+# Stable tie preferences. Statistical scoring still considers every supported codec.
+_COMMON = [
+    "cp1252",
+    "latin_1",
+    "cp1254",
+    "cp1250",
+    "cp1251",
+    "cp1253",
+    "cp1255",
+    "cp1256",
+    "cp1257",
+    "cp1258",
+    "shift_jis",
+    "cp932",
+    "euc_jp",
+    "euc_kr",
+    "cp949",
+    "big5",
+    "gb2312",
+    "gbk",
+    "gb18030",
+    "cp850",
+    "cp437",
+    "cp866",
+]
+_CANDIDATES = list(dict.fromkeys(_COMMON + ALL_ENCODINGS + ["cp720", "cp874", "cp875"]))
+
+
+def _from_sample(
+    data: bytes,
+    threshold: float = 0.2,
+    cp_isolation: Optional[List[str]] = None,
+    cp_exclusion: Optional[List[str]] = None,
+    language_threshold: float = 0.1,
+    enable_fallback: bool = False,
+) -> DetectionResult:
+    """Score a bounded prefix. The caller must validate every final candidate."""
+    candidates = _CANDIDATES if cp_isolation is None else cp_isolation
+    rows: list[tuple[str, float, float, str]] = []
+    # Local only: codecs that produce identical Unicode share statistical work.
+    evidence: dict[str, tuple[float, float]] = {}
+    for name in candidates:
+        encoding = _codec(name)
+        if cp_exclusion and encoding in cp_exclusion:
+            continue
+        try:
+            decoded = codecs.getincrementaldecoder(encoding)(errors="strict").decode(
+                data, final=False
+            )
+        except UnicodeError:
+            continue
+        if decoded not in evidence:
+            evidence[decoded] = text_quality(decoded)
+        support, bad = evidence[decoded]
+        if bad > threshold or support < 0.25:
+            continue
+        rows.append((encoding, support, bad, decoded))
+    if not rows:
+        return _make_result(None, 1.0, 0.0, "", False, [], "Insufficient text evidence.", len(data))
+    rows.sort(key=lambda item: item[1], reverse=True)
+    encoding, support, bad, decoded = rows[0]
+    # Same-text aliases are not independent linguistic evidence. Use the margin
+    # to the next different decoding; score remains explicitly uncalibrated.
+    runner = next((score for _, score, _, text in rows[1:] if text != decoded), support)
+    margin = max(0.0, support - runner)
+    confidence = round(min(0.95, max(0.1, 0.5 * support + min(0.45, margin * 3))), 4)
+    alts = [
+        EncodingAlternative(enc, round(min(0.95, max(0.0, score * 0.5)), 4), "")
+        for enc, score, _, _ in rows[1:6]
+    ]
+    return _make_result(
+        encoding,
+        bad,
+        min(1.0, max(0.0, support)),
+        "",
+        False,
+        alts,
+        f"Selected {encoding}; character-pair support {support:.3f}, margin {margin:.3f}.",
+        len(data),
+        confidence=confidence,
+    )
+
+
+_CONTROL_BYTES = re.compile(rb"[\x00-\x08\x0b\x0e-\x1a\x1c-\x1f\x7f]")
+_BINARY_MAGIC = (
+    b"\x89PNG\r\n\x1a\n",
+    b"\xff\xd8\xff",
+    b"GIF87a",
+    b"GIF89a",
+    b"PK\x03\x04",
+    b"\x1f\x8b",
+    b"%PDF-",
+    b"\x7fELF",
+    b"Rar!\x1a\x07",
+)
+
+
+def _codec(name: str) -> str:
+    if not isinstance(name, str):
+        raise TypeError("encoding names must be strings")
+    info = codecs.lookup(name)
+    # Reject non-text transforms such as base64, zlib and rot13.
+    if not getattr(info, "_is_text_encoding", True):
+        raise LookupError(f"{name!r} is not a bytes-to-text codec")
+    if info.incrementaldecoder is None:
+        raise LookupError(f"{name!r} requires an incremental text decoder")
+    if not isinstance(info.incrementaldecoder(errors="strict").decode(b"", final=False), str):
+        raise LookupError(f"{name!r} is not a bytes-to-text codec")
+    norm = info.name.replace("-", "_")
+    return "latin_1" if norm == "iso8859_1" else norm
+
+
+def _filters(
+    isolation: Optional[List[str]], exclusion: Optional[List[str]]
+) -> tuple[Optional[List[str]], List[str]]:
+    include = (
+        list(dict.fromkeys(_codec(name) for name in isolation)) if isolation is not None else None
+    )
+    exclude = (
+        list(dict.fromkeys(_codec(name) for name in exclusion)) if exclusion is not None else []
+    )
+    if include is not None:
+        include = [name for name in include if name not in exclude]
+    return include, exclude
+
+
+def _allowed(name: str, include: Optional[List[str]], exclude: List[str]) -> bool:
+    return name not in exclude and (include is None or name in include)
+
+
+def _binary(data: bytes) -> bool:
+    if data.startswith(_BINARY_MAGIC):
+        return True
+    sample = data[:4096]
+    if not sample or detect_null_pattern(sample):
+        return False
+    return len(_CONTROL_BYTES.findall(sample)) / len(sample) > 0.05
+
+
+def _valid(data: bytes, encoding: str) -> bool:
+    try:
+        if len(data) <= 1_048_576:
+            data.decode(encoding, errors="strict")
+        else:
+            decoder = codecs.getincrementaldecoder(encoding)(errors="strict")
+            view = memoryview(data)
+            for offset in range(0, len(data), 65536):
+                decoder.decode(view[offset : offset + 65536], final=False)
+            decoder.decode(b"", final=True)
+        return True
+    except (UnicodeError, LookupError):
+        return False
+
+
+def _result(
+    encoding: Optional[str],
+    size: int,
+    why: str,
+    confidence: float = 0.0,
+    status: str = "matched",
+    examined: Optional[int] = None,
+) -> DetectionResult:
+    r = _make_result(
+        encoding, 0.0 if encoding else 1.0, 0.0, "", False, [], why, size, confidence=confidence
+    )
+    return replace(
+        r,
+        bytes_examined=size if examined is None else examined,
+        bytes_validated=size if encoding else 0,
+        complete=True,
+        status=status if encoding else status if status != "matched" else "unknown",
+    )
+
+
+_HIGH_BYTE = re.compile(b"[\x80-\xff\x1b]")
+
+
+def _informative_sample(data: bytes | bytearray, size: int) -> bytes:
+    """Avoid spending the entire linguistic budget on an ASCII file header."""
+    first = _HIGH_BYTE.search(data)
+    start = max(0, first.start() - 64) if first and first.start() > size // 4 else 0
+    return bytes(data[start : start + size])
+
+
+def _bom_codec(data: bytes, include: Optional[List[str]], exclude: List[str]) -> Optional[str]:
+    raw = CandidateSelector(data).bom_encoding()
+    if raw is None:
+        return None
+    canonical = (
+        "utf_32" if raw.startswith("utf_32") else "utf_16" if raw.startswith("utf_16") else raw
+    )
+    if _allowed(canonical, include, exclude):
+        return canonical
+    return raw if _allowed(raw, include, exclude) else None
+
+
+def _transport_encoding(data: bytes) -> Optional[str]:
+    # Distinctive shift syntax is checked before the ASCII/UTF-8 fast paths.
+    if b"~" in data and b"~{" in data and b"~}" in data:
+        try:
+            decoded = data.decode("hz")
+            if len(re.findall(r"[\u4e00-\u9fff]", decoded)) / max(1, len(decoded)) > 0.1:
+                return "hz"
+        except UnicodeError:
+            pass
+    if b"+" in data and re.search(rb"\+[A-Za-z0-9/]{3,}(?:-|[^A-Za-z0-9/]|$)", data):
+        try:
+            decoded = data.decode("utf_7")
+            if not decoded.isascii() and all(c.isprintable() or c in "\n\r\t" for c in decoded):
+                return "utf_7"
+        except UnicodeError:
+            pass
+    return None
 
 
 def from_bytes(
@@ -479,319 +272,198 @@ def from_bytes(
     cp_exclusion: Optional[List[str]] = None,
     language_threshold: float = 0.1,
     enable_fallback: bool = True,
+    *,
+    sample_size: int = 4096,
+    include_language: bool = False,
+    min_confidence: float = 0.0,
+    encoding_hint: Optional[str] = None,
+    use_hints: bool = True,
 ) -> DetectionResult:
+    """Detect bytes and strictly validate the selected codec over the entire input.
+
+    Linguistic scoring is bounded by ``sample_size``; full validation is O(n).
+    ``confidence`` is an evidence score, not a calibrated probability.
+    Filters apply to all paths. An empty isolation list allows no encodings.
+    ``enable_fallback`` permits a validated, explicitly low-confidence last
+    candidate; it never returns an encoding that cannot decode the input.
+    Language reporting is opt-in. No document text is retained globally.
     """
-    Detect the encoding of a byte sequence.
-
-    Args:
-        data:               Raw bytes to analyse.
-        steps:              (legacy compat) Number of chunks for mess detection.
-        chunk_size:         (legacy compat) Chunk size in bytes.
-        threshold:          Maximum chaos ratio to accept an encoding (0.0–1.0).
-        cp_isolation:       If set, only test these encodings.
-        cp_exclusion:       If set, never test these encodings.
-        language_threshold: Minimum coherence score for language reporting.
-        enable_fallback:    Return utf_8 fallback instead of None when nothing works.
-
-    Returns:
-        :class:`DetectionResult`
-    """
-    del steps, chunk_size  # legacy compatibility — reserved for future use
-
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError(f"Expected bytes or bytearray, got {type(data).__name__}")
     if isinstance(data, bytearray):
         data = bytes(data)
-    if not isinstance(data, bytes):
-        raise TypeError(f"Expected bytes or bytearray, got {type(data).__name__!r}")
-
-    byte_count = len(data)
-
-    # Empty input
-    if byte_count == 0:
-        return _make_result(
-            "utf_8",
-            0.0,
-            0.0,
-            "",
-            False,
-            [],
-            "Empty input — defaulting to UTF-8.",
-            0,
-            confidence=0.5,
+    for name, value in [("sample_size", sample_size), ("steps", steps), ("chunk_size", chunk_size)]:
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if sample_size < 64:
+        raise ValueError("sample_size must be at least 64 bytes")
+    for name, score_value in [
+        ("threshold", threshold),
+        ("language_threshold", language_threshold),
+        ("min_confidence", min_confidence),
+    ]:
+        if not 0.0 <= score_value <= 1.0:
+            raise ValueError(f"{name} must be between 0 and 1")
+    include, exclude = _filters(cp_isolation, cp_exclusion)
+    hint = _codec(encoding_hint) if encoding_hint is not None else None
+    size = len(data)
+    if include == []:
+        return _result(None, size, "No encodings allowed by the filters.")
+    if not data:
+        enc = (
+            ("utf_8" if _allowed("utf_8", include, exclude) else (include[0] if include else None))
+            if min_confidence == 0
+            else None
         )
-
-    sel = CandidateSelector(data)
-
-    # ── Fast path 1: BOM ─────────────────────────────────────────────────────
-    bom_enc = sel.bom_encoding()
-    if bom_enc:
-        try:
-            decoded = data.decode(bom_enc, errors="strict")
-            sample = decoded[:4000]
-            langs = detect_language(sample, threshold=language_threshold)
-            lang = langs[0][0] if langs else ""
-            coh = langs[0][1] if langs else 0.0
-            # Use the BOM codec name (utf_8_sig for UTF-8 BOM) — matches CandidateSelector / codecs.
-            return _make_result(
-                bom_enc,
-                0.0,
-                coh,
-                lang,
-                True,
-                [],
-                f"BOM/SIG detected — codec {bom_enc!r}.",
-                byte_count,
-                confidence=1.0,
+        return _result(enc, 0, "Empty input; no encoding evidence.", 0.0, "ambiguous")
+    bom = _bom_codec(data, include, exclude)
+    if bom:
+        if not _valid(data, bom):
+            return _result(
+                None, size, "BOM declares an encoding but the input is invalid.", status="invalid"
             )
-        except (UnicodeDecodeError, LookupError):
-            pass  # Misleading BOM — fall through
-
-    # ── Fast path 2: Pure ASCII (but not 7-bit ISO-2022) ───────────────────────
-    if sel.is_ascii_only() and not _looks_like_iso2022(data):
-        return _make_result(
-            "ascii",
-            0.0,
-            1.0,
-            "English",
-            False,
-            [EncodingAlternative("utf_8", 1.0, "English")],
-            "All bytes in 0x00–0x7F range — pure ASCII.",
-            byte_count,
-            confidence=1.0,
+        r = _result(bom, size, f"BOM declares {bom}; all bytes validated.", 1.0)
+        return replace(r, bom_detected=True)
+    transport = _transport_encoding(data) if data.isascii() else None
+    if transport and _allowed(transport, include, exclude):
+        if min_confidence <= 0.85:
+            return _result(
+                transport, size, "Recognized and validated 7-bit shift syntax.", 0.85, "ambiguous"
+            )
+        return _result(None, size, "Below minimum confidence.")
+    shape = detect_null_pattern(data)
+    if shape and _allowed(shape, include, exclude) and _valid(data, shape):
+        return (
+            _result(shape, size, "Unicode byte-lane pattern; complete input validated.", 0.9)
+            if min_confidence <= 0.9
+            else _result(None, size, "Below minimum confidence.")
         )
-
-    # ── Fast path 3: Valid UTF-8 ──────────────────────────────────────────────
-    # UTF-16/32-stored ASCII can decode as UTF-8 (ASCII + NUL); prefer null-pattern path.
-    null_pat = detect_null_pattern(data)
-    utf16_or_32_shape = null_pat is not None and byte_count >= 8
-
-    # 7-bit ISO-2022 is valid UTF-8 byte-for-byte but is not UTF-8 text.
-    if (
-        not utf16_or_32_shape
-        and sel.is_utf8_valid()
-        and not _looks_like_iso2022(data)
-    ):
-        decoded = data.decode("utf_8")
-        sample = decoded[:4000]
-        chaos, exceeded = sliding_window_mess(sample, threshold=threshold)
-        if not exceeded or _emoji_zwj_rich_text(sample):
-            langs = detect_language(sample, threshold=language_threshold)
-            lang = langs[0][0] if langs else ""
-            coh = langs[0][1] if langs else 0.0
-            return _make_result(
-                "utf_8",
-                chaos,
-                coh,
-                lang,
-                False,
-                [],
-                f"Valid UTF-8. Chaos {chaos:.1%}. Coherence {coh:.1%} ({lang}).",
-                byte_count,
-            )
-
-    # ── Standard path ─────────────────────────────────────────────────────────
-    candidates = sel.get_candidates()
-
-    if cp_isolation:
-        candidates = [c for c in candidates if c in cp_isolation]
-    if cp_exclusion:
-        candidates = [c for c in candidates if c not in cp_exclusion]
-    if not candidates:
-        candidates = ["utf_8"]
-
-    # Sample large files
-    sample_data = data[:OPTIMAL_SAMPLE] if byte_count > TOO_LARGE else data
-
-    results: List[tuple[str, float, float, str, int, str, float]] = []
-    failed_skip: set[str] = set()
-
-    for cand_idx, encoding in enumerate(candidates):
-        if encoding in failed_skip:
-            logger.debug("Skipping %s (similar to failed encoding)", encoding)
-            continue
-
-        try:
-            decoded = sample_data.decode(encoding, errors="strict")
-        except (UnicodeDecodeError, LookupError):
-            failed_skip.update(SIMILAR_ENCODINGS.get(encoding, []))
-            continue
-
-        chaos, exceeded = sliding_window_mess(decoded[:4000], threshold=threshold)
-        if exceeded:
-            logger.debug("%s rejected: chaos=%.3f", encoding, chaos)
-            failed_skip.update(SIMILAR_ENCODINGS.get(encoding, []))
-            continue
-
-        sample_text = decoded[:4000]
-        langs = detect_language(sample_text, threshold=language_threshold)
-        lang = langs[0][0] if langs else ""
-        coh = langs[0][1] if langs else 0.0
-        fp_fit = fingerprint_cosine_for_encoding(sample_data, encoding)
-        results.append((encoding, chaos, coh, lang, cand_idx, sample_text, fp_fit))
-        logger.debug("%s accepted: chaos=%.3f coh=%.3f lang=%s", encoding, chaos, coh, lang)
-
-    if not results:
-        if enable_fallback:
-            return _make_result(
-                "utf_8",
-                1.0,
-                0.0,
-                "",
-                False,
-                [],
-                "No encoding passed detection. UTF-8 fallback returned.",
-                byte_count,
-                confidence=0.1,
-            )
-        return _make_result(
+    if _binary(data):
+        return _result(
             None,
-            1.0,
-            0.0,
-            "",
-            False,
-            [],
-            "No encoding passed detection.",
-            byte_count,
-            confidence=0.0,
+            size,
+            "Binary signature or excessive control bytes.",
+            status="binary",
+            examined=min(size, 4096),
         )
-
-    arab_cp1256_probe = 0.0
-    try:
-        arab_cp1256_probe = _arabic_letters_ratio(sample_data.decode("cp1256"))
-    except (UnicodeDecodeError, LookupError):
-        pass
-
-    big5_cjk_probe = 0.0
-    try:
-        big5_cjk_probe = _cjk_ideographs_ratio(sample_data.decode("big5"))
-    except (UnicodeDecodeError, LookupError):
-        pass
-
-    ej_kana_probe = 0.0
-    try:
-        _ejt = sample_data.decode("euc_jp")
-        ej_kana_probe = _kana_ratio(_ejt) + _cjk_ideographs_ratio(_ejt)
-    except (UnicodeDecodeError, LookupError):
-        pass
-
-    cyr_hint_for_rank = cp866_vs_cp1251_hint(sample_data)
-    jb_for_rank = japanese_mbcs_bias(sample_data)
-
-    def _rank_key(x: tuple[str, float, float, str, int, str, float]) -> tuple[float, int]:
-        enc, chaos, coh, lang, idx, sample_text, fp_fit = x
-        align = _language_encoding_alignment(lang, enc)
-        script = _encoding_script_bonus(enc, sample_text)
-        combined = coh + 0.28 * align + 0.42 * script
-        # Chaos alone over-prefers a slightly lower mess when the encoding is wrong
-        # (e.g. cp1251 vs cp1252 on Latin text). Blend chaos with coherence + priors.
-        # Byte fingerprint cosine breaks ties when wrong decodings look clean (Big5→cp949).
-        c1252_zone = cp1252_zone_ratio(sel.hist, len(sample_data))
-        zone_adj = 0.0
-        if enc == "latin_1" and c1252_zone > 0.0004:
-            zone_adj += 0.28
-        if enc in ("cp1252", "cp1250") and c1252_zone > 0.0004:
-            zone_adj -= 0.05
-        gre = _greek_letters_ratio(sample_text)
-        heb = _hebrew_letters_ratio(sample_text)
-        cyr_r = _cyrillic_letters_ratio(sample_text)
-        win_iso = 0.0
-        # Prefer Windows Greek/Hebrew over ISO-8859-* when both decode cleanly (CN corpus).
-        if gre > 0.06 and cyr_r < 0.05:
-            # Arabic bytes misread as Greek letters still yield high gre; cp1256 probe disambiguates.
-            if arab_cp1256_probe > 0.65 and enc in ("cp1253", "iso8859_7") and gre > 0.35:
-                win_iso += 0.16
-            elif arab_cp1256_probe <= 0.65:
-                if enc == "cp1253":
-                    win_iso -= 0.11
-                if enc == "iso8859_7":
-                    win_iso += 0.11
-        if heb > 0.06 and cyr_r < 0.05:
-            if enc == "cp1255":
-                win_iso -= 0.11
-            if enc == "iso8859_8":
-                win_iso += 0.11
-        # Cyrillic DOS/Windows split — Hebrew gate avoids false Cyrillic tweaks on Hebrew bytes.
-        if (
-            cyr_hint_for_rank == "cp1251"
-            and jb_for_rank is None
-            and hebrew_sbcs_likelihood(sample_data) < 0.93
-        ):
-            if enc == "cp1251":
-                win_iso -= 0.12
-            if enc in ("cp1253", "iso8859_7"):
-                win_iso += 0.16
-        # Cyrillic bytes misread as Greek when Japanese pair heuristics fire on CP1251 streams;
-        # cp1256 Arabic probe ~0.39 (Russian) vs ~0.49 (Greek CN) — split near 0.43.
-        if (
-            cyr_hint_for_rank == "cp1251"
-            and jb_for_rank == "euc_jp"
-            and enc == "cp1253"
-            and gre > 0.5
-            and arab_cp1256_probe < 0.43
-            and hebrew_sbcs_likelihood(sample_data) < 0.93
-        ):
-            win_iso += 0.24
-        if cyr_hint_for_rank == "cp866":
-            if enc == "cp866":
-                win_iso -= 0.18
-            if enc == "cp1251":
-                win_iso += 0.12
-        if enc in ("big5", "big5hkscs") and ej_kana_probe > 0.55 and jb_for_rank == "euc_jp":
-            win_iso += 0.19 if enc == "big5" else 0.17
-        if enc == "cp949" and big5_cjk_probe > 0.38:
-            h = _hangul_ratio(sample_text)
-            cjk = _cjk_ideographs_ratio(sample_text)
-            if h > 0.55 and cjk < 0.06:
-                win_iso += 0.22
-        score = chaos - 0.52 * combined - 0.26 * fp_fit + zone_adj + win_iso
-        return (score, idx)
-
-    results.sort(key=_rank_key)
-    results = _maybe_promote_korean_mbcs(results, sample_data)
-    results = _maybe_promote_hebrew_sbcs(results, sample_data)
-    results = _maybe_promote_thai_mbcs(results, sample_data)
-    results = _maybe_promote_japanese_mbcs(results, sample_data)
-    results = _maybe_promote_cjk_over_cp949(results, sample_data)
-    best_enc, best_chaos, best_coh, best_lang, _, _, _ = results[0]
-
-    alts = [
-        EncodingAlternative(enc, round(_confidence(c, h, False), 4), lg)
-        for enc, c, h, lg, _, _, _ in results[1:6]
-    ]
-
-    why = (
-        f"Selected {best_enc!r}. "
-        f"Chaos: {best_chaos:.1%}. "
-        + (f"Language: {best_lang} (coherence {best_coh:.1%}). " if best_coh > 0 else "")
-        + (f"{len(results) - 1} alternative(s) considered." if len(results) > 1 else "")
+    shape = detect_null_pattern(data)
+    if not shape and not _looks_like_iso2022(data):
+        if data.isascii() and _allowed("ascii", include, exclude):
+            return _result("ascii", size, "All bytes are valid ASCII text.", 1.0)
+        if _allowed("utf_8", include, exclude) and _valid(data, "utf_8"):
+            r = _result("utf_8", size, "All bytes validated as UTF-8.", 0.99)
+            if include_language:
+                language_sample = codecs.getincrementaldecoder("utf_8")().decode(
+                    data[:sample_size], final=False
+                )
+                langs = detect_language(language_sample, threshold=language_threshold)
+                if langs:
+                    r = replace(r, language=langs[0][0], coherence=round(langs[0][1], 4))
+            return (
+                r
+                if r.confidence >= min_confidence
+                else _result(None, size, "Below minimum confidence.")
+            )
+    if hint is None and use_hints:
+        declared = hint_from_content(data)
+        if declared:
+            try:
+                hint = _codec(declared)
+            except (LookupError, TypeError):
+                pass
+    if hint and _allowed(hint, include, exclude) and _valid(data, hint):
+        r = _result(hint, size, f"Encoding hint {hint}; all bytes validated.", 0.95)
+        return (
+            r
+            if r.confidence >= min_confidence
+            else _result(None, size, "Below minimum confidence.")
+        )
+    sample = _informative_sample(data, sample_size)
+    r = _from_sample(
+        sample,
+        threshold=threshold,
+        cp_isolation=include,
+        cp_exclusion=exclude,
+        language_threshold=language_threshold,
+        enable_fallback=False,
+    )
+    ranked = ([r.encoding] if r.encoding else []) + [a.encoding for a in r.alternatives]
+    for encoding in ranked:
+        if encoding and _allowed(encoding, include, exclude) and _valid(data, encoding):
+            confidence = r.confidence if encoding == r.encoding else min(0.5, r.confidence)
+            if confidence < min_confidence:
+                break
+            if include_language and encoding == r.encoding:
+                decoded = codecs.getincrementaldecoder(encoding)().decode(sample, final=False)
+                langs = detect_language(decoded, threshold=language_threshold)
+                if langs:
+                    r = replace(r, language=langs[0][0])
+            return replace(
+                r,
+                encoding=encoding,
+                confidence=confidence,
+                byte_count=size,
+                bytes_examined=len(sample),
+                bytes_validated=size,
+                complete=True,
+                status="ambiguous" if r.alternatives else "matched",
+                chaos=r.chaos if encoding == r.encoding else 0.0,
+                coherence=r.coherence if encoding == r.encoding else 0.0,
+                alternatives=[a for a in r.alternatives if a.encoding != encoding],
+                language=r.language if include_language and encoding == r.encoding else "",
+                why=r.why + " Full input validated."
+                if encoding == r.encoding
+                else f"Full validation rejected the sampled winner; selected {encoding} as a validated alternative.",
+            )
+    # An explicit candidate can be absent from the statistical shortlist. It
+    # still must pass full validation before being offered as a fallback.
+    if enable_fallback and min_confidence <= 0.1:
+        for encoding in include or []:
+            if _valid(data, encoding):
+                return _result(
+                    encoding,
+                    size,
+                    "Validated fallback; insufficient linguistic evidence.",
+                    0.1,
+                    "ambiguous",
+                    len(sample),
+                )
+    return _result(
+        None,
+        size,
+        "No permitted candidate validates the complete input.",
+        status="unknown",
+        examined=len(sample),
     )
 
-    return _make_result(best_enc, best_chaos, best_coh, best_lang, False, alts, why, byte_count)
 
-
-def from_path(
-    path: str | bytes | PathLike,  # type: ignore[type-arg]
-    **kwargs: object,
-) -> DetectionResult:
-    """Detect encoding of a file. Accepts any path-like object."""
+def from_path(path: str | bytes | PathLike[str], **kwargs: Any) -> DetectionResult:
+    """Read a file with bounded memory and validate every byte."""
     with open(path, "rb") as fp:
         return from_fp(fp, **kwargs)
 
 
 def from_fp(fp: BinaryIO, **kwargs: Any) -> DetectionResult:
-    """Detect encoding from an open binary file pointer. Does not close it."""
-    return from_bytes(fp.read(), **kwargs)
+    """Consume a binary stream without an unbounded read. Leaves it open."""
+    from .streaming import StreamDetector
+
+    detector = StreamDetector(**kwargs)
+    try:
+        while True:
+            chunk = fp.read(65536)
+            if not chunk:
+                break
+            detector.feed(chunk)
+        return detector.finalize()
+    finally:
+        detector.close()
 
 
-def is_binary(
-    data: bytes | str | PathLike,  # type: ignore[type-arg]
-    **kwargs: Any,
-) -> bool:
-    """Return ``True`` if `data` appears to be a binary (non-text) file."""
-    kwargs.setdefault("enable_fallback", False)  # type: ignore[call-overload]
+def is_binary(data: bytes | str | PathLike[str], **kwargs: Any) -> bool:
+    """Return True only for positive binary evidence, not an unknown encoding."""
+    kwargs["enable_fallback"] = False
     if isinstance(data, (str, PathLike)):
-        result = from_path(data, **kwargs)
-    elif isinstance(data, (bytes, bytearray)):
-        result = from_bytes(data, **kwargs)
-    else:
-        result = from_fp(data, **kwargs)
-    return result.encoding is None
+        return from_path(data, **kwargs).status == "binary"
+    if isinstance(data, (bytes, bytearray)):
+        return from_bytes(data, **kwargs).status == "binary"
+    return from_fp(data, **kwargs).status == "binary"

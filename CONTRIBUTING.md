@@ -1,84 +1,47 @@
 # Contributing
 
-Thanks for your interest in **bytesense**.
+Follow the [Code of Conduct](CODE_OF_CONDUCT.md). Use a focused `oguzhankir/<topic>` branch and sign commits with `git commit -s` under the project's DCO.
 
-By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Setup
+## Development
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
-python scripts/build_fingerprints.py
+BYTESENSE_BUILD_RUST=0 pip install -e '.[dev,docs]'
+python scripts/fetch_cn_benchmark_samples.py
+ruff check src tests benchmarks scripts setup.py
+mypy src/bytesense
+BYTESENSE_PURE_PYTHON=1 pytest tests --cov=bytesense --cov-branch
+pytest benchmarks/test_bench_detection.py benchmarks/test_hard_scenarios.py --benchmark-disable
+mkdocs build --strict
 ```
 
-## Documentation (MkDocs)
+On Windows, set environment variables using your shell's syntax. Native development requires Rust 1.88+:
 
 ```bash
-pip install -e ".[docs]"
-mkdocs serve          # local preview
-mkdocs build --strict # writes site/
+BYTESENSE_BUILD_RUST=1 pip install -e . --no-build-isolation
+BYTESENSE_EXPECT_RUST=1 pytest tests
+cargo test --manifest-path rust/Cargo.toml --locked
 ```
 
-The **Docs Pages** workflow ([`.github/workflows/docs.yml`](.github/workflows/docs.yml)) deploys to GitHub Pages on pushes to `main`. In the repository **Settings → Pages**, set **Source** to **GitHub Actions** if it is not already.
+CI tests pure and native installations separately on Linux, macOS and Windows. Packaging jobs install and test actual wheels, check abi3 compatibility, and test the sdist without compiling Rust. The coverage floor remains 75%; timing measurements are reports, not noisy speed assertions.
 
-## Checks before a PR
+## Model and benchmarks
 
-- `ruff check src/ tests/ benchmarks/`
-- `mypy src/bytesense`
-- `pytest tests/ -v --cov=bytesense` (must satisfy `fail_under` in `pyproject.toml`)
-- `python scripts/fetch_cn_benchmark_samples.py` (for full benchmark parity with charset-normalizer’s `data/`)
-- `pytest benchmarks/test_bench_detection.py -k accuracy -v`
+The [benchmark documentation](docs/benchmarks.md) describes corpus pins, Unicode-based grouping and reproduction commands. Keep development and holdout documents separate. Do not tune the model on the holdout, silently omit missing inputs, compare differently sized payloads, or advertise sample-only latency as full-input validation latency.
 
-Optional (with Rust installed):
+`language.json.gz` contains aggregate character-pair statistics; no test documents are bundled. The core retains static model metadata, never document text in a global cache. Native and Python paths must agree within numerical tolerance and produce the same rounded detection scores.
+
+## Release
+
+Keep `pyproject.toml`, `rust/Cargo.toml`, and `src/bytesense/version.py` aligned; `python scripts/check_version.py` checks them. Update the existing changelog and API/migration documentation when behavior changes.
 
 ```bash
-maturin develop --release --manifest-path rust/Cargo.toml
-pytest tests/test_rust.py -v
+BYTESENSE_BUILD_RUST=0 python -m build
+python scripts/check_dist.py dist
+python -m twine check --strict dist/*
 ```
 
-## Test PyPI (release dry-run)
+Publishing a GitHub Release triggers the release workflow. It checks the tag, builds and tests portable/native distributions, then uses the configured PyPI trusted publisher environment. A PR does not publish a release.
 
-Build fingerprints, create an sdist, check it, then upload (requires `pip install -e ".[dev]"` for `twine` and `maturin`):
-
-```bash
-# Create a token at https://test.pypi.org/manage/account/token/ then paste it below (keep the quotes).
-export TWINE_USERNAME=__token__
-export TWINE_PASSWORD='pypi-AgEIcHlwaS5vcmc...'
-./scripts/upload_testpypi.sh
-```
-
-Do not put `#` comments on the same line as `export TWINE_PASSWORD=...`: an apostrophe inside the comment can break zsh parsing.
-
-Install the uploaded package (use PyPI as an extra index so build backends like `maturin` resolve from production PyPI):
-
-```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bytesense
-```
-
-## PyPI (production)
-
-Bump `version` in `pyproject.toml` and `rust/Cargo.toml` before uploading.
-
-**Manual upload** (token from [pypi.org → Account → API tokens](https://pypi.org/manage/account/token/)):
-
-```bash
-export TWINE_USERNAME=__token__
-export TWINE_PASSWORD='pypi-...'
-./scripts/upload_pypi.sh
-```
-
-Same rule as Test PyPI: do not put `#` comments on the same line as `export TWINE_PASSWORD=...` in zsh.
-
-If upload returns **400 Bad Request**, run `twine upload dist/* --verbose` and read PyPI’s JSON error text. Common causes: **invalid or placeholder author email** in metadata (`example.com` is rejected), **duplicate version** (file already on PyPI), or **unverified email** on your PyPI account.
-
-**GitHub Actions** (optional): publishing from [`.github/workflows/release.yml`](.github/workflows/release.yml) when you **publish** a GitHub Release requires [trusted publishing](https://pypi.org/manage/project/bytesense/settings/publishing/) on PyPI (OIDC; no upload token in secrets).
-
-## Style
-
-Match existing formatting and keep changes focused on the issue at hand.
-
-## Author
-
-Maintained by **Oğuzhan Kır**.
+Keep documentation focused: README, quick start, API reference, benchmarks, and the shared changelog. Put rationale and validation detail in the PR instead of creating additional planning documents.

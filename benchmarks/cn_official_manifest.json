@@ -3,25 +3,116 @@
   "source_path": "data/",
   "reference_test": "tests/test_full_detection.py",
   "notice": "Sample files originate from charset-normalizer data/ (see upstream data/NOTICE.md). Used only for benchmark comparison.",
-  "base_url": "https://raw.githubusercontent.com/jawah/charset_normalizer/master/data/",
+  "base_url": "https://raw.githubusercontent.com/jawah/charset_normalizer/b130b7dae36658c7ba67381fe06a62c7c7c03894/data/",
   "files": [
-    {"file": "sample-arabic-1.txt", "encoding": "cp1256"},
-    {"file": "sample-french-1.txt", "encoding": "cp1252"},
-    {"file": "sample-arabic.txt", "encoding": "utf_8"},
-    {"file": "sample-russian-3.txt", "encoding": "utf_8"},
-    {"file": "sample-french.txt", "encoding": "utf_8"},
-    {"file": "sample-chinese.txt", "encoding": "big5"},
-    {"file": "sample-greek.txt", "encoding": "cp1253"},
-    {"file": "sample-greek-2.txt", "encoding": "cp1253"},
-    {"file": "sample-hebrew-2.txt", "encoding": "cp1255"},
-    {"file": "sample-hebrew-3.txt", "encoding": "cp1255"},
-    {"file": "sample-bulgarian.txt", "encoding": "utf_8"},
-    {"file": "sample-english.bom.txt", "encoding": "utf_8"},
-    {"file": "sample-spanish.txt", "encoding": "utf_8"},
-    {"file": "sample-korean.txt", "encoding": "cp949"},
-    {"file": "sample-turkish.txt", "encoding": "cp1254"},
-    {"file": "sample-russian-2.txt", "encoding": "utf_8"},
-    {"file": "sample-russian.txt", "encoding": "mac_cyrillic"},
-    {"file": "sample-polish.txt", "encoding": "utf_8"}
-  ]
+    {
+      "file": "sample-arabic-1.txt",
+      "encoding": "cp1256",
+      "sha256": "00c83c71aaf34f6c17ee5ed4e6ad868fe7f281c56d96d5f88f21fc5d39203648",
+      "size": 906
+    },
+    {
+      "file": "sample-french-1.txt",
+      "encoding": "cp1252",
+      "sha256": "6b88988aa8cfd689df08f91a25ae0ea8032cc28b4557092432849a2712fce716",
+      "size": 3251
+    },
+    {
+      "file": "sample-arabic.txt",
+      "encoding": "utf_8",
+      "sha256": "3606d50f8dbd20d80aa4470bd89e74696ceda8ec9138f9524330869eb9aafa46",
+      "size": 1637
+    },
+    {
+      "file": "sample-russian-3.txt",
+      "encoding": "utf_8",
+      "sha256": "81c49a881b7175f68201edc41966016b5c0f16ddb4ac4a30407af0e4ac8b84e6",
+      "size": 3070
+    },
+    {
+      "file": "sample-french.txt",
+      "encoding": "utf_8",
+      "sha256": "ab1b0ebf22b7bd85d2a45600844c0a2c89ba6217b862a6d96b9fa46ce1e132bb",
+      "size": 3375
+    },
+    {
+      "file": "sample-chinese.txt",
+      "encoding": "big5",
+      "sha256": "5f4aa09479ff9366936b242697680f4f0a50dcb3829fb10d855644bc035a7b7a",
+      "size": 743
+    },
+    {
+      "file": "sample-greek.txt",
+      "encoding": "cp1253",
+      "sha256": "cf9afae3a58f28a422fa8edecf255744a8cffb559262d3b3f7dfa3e1d6f59cb4",
+      "size": 570
+    },
+    {
+      "file": "sample-greek-2.txt",
+      "encoding": "cp1253",
+      "sha256": "cf9afae3a58f28a422fa8edecf255744a8cffb559262d3b3f7dfa3e1d6f59cb4",
+      "size": 570
+    },
+    {
+      "file": "sample-hebrew-2.txt",
+      "encoding": "cp1255",
+      "sha256": "eb3a0aa5646487ee6b06c7ef8a9223a89cc2c7b920c787f982ba712d8fedf5f4",
+      "size": 340
+    },
+    {
+      "file": "sample-hebrew-3.txt",
+      "encoding": "cp1255",
+      "sha256": "eb3a0aa5646487ee6b06c7ef8a9223a89cc2c7b920c787f982ba712d8fedf5f4",
+      "size": 340
+    },
+    {
+      "file": "sample-bulgarian.txt",
+      "encoding": "utf_8",
+      "sha256": "d6f347a930569baa7150ab528cfd64420fd9335d89d6617cbed4addec7c4ad30",
+      "size": 2198
+    },
+    {
+      "file": "sample-english.bom.txt",
+      "encoding": "utf_8",
+      "sha256": "4a5850a424c075e25e86fbee489561d5869efdb42297ed08ae074238f312e818",
+      "size": 859
+    },
+    {
+      "file": "sample-spanish.txt",
+      "encoding": "utf_8",
+      "sha256": "b43d16b5398e26565153b1c1118a7f040fa2350493eac5cea51721ffe5367edd",
+      "size": 7281
+    },
+    {
+      "file": "sample-korean.txt",
+      "encoding": "cp949",
+      "sha256": "281246aaaefceb47f6bc0120b2646ebe1832d57101cc0d7bfaeedfbfed979329",
+      "size": 387
+    },
+    {
+      "file": "sample-turkish.txt",
+      "encoding": "cp1254",
+      "sha256": "df265e595aac51e92faafd41afefadbd21b820d1be3eec2e35dab4213fb16fba",
+      "size": 1840
+    },
+    {
+      "file": "sample-russian-2.txt",
+      "encoding": "utf_8",
+      "sha256": "2492ff4b9b15c174a998457ff02233cd1367bdfa5d7c066145f15616aaaa941a",
+      "size": 2209
+    },
+    {
+      "file": "sample-russian.txt",
+      "encoding": "mac_cyrillic",
+      "sha256": "becee0937e700266497ef4cbe84352be0449476a9299a7fc7c18647344e3ff8c",
+      "size": 1211
+    },
+    {
+      "file": "sample-polish.txt",
+      "encoding": "utf_8",
+      "sha256": "fe130e75df06b484e1a00cfa6c7679f2ab2b2c44f9a69780b89e729c651e5fcf",
+      "size": 5815
+    }
+  ],
+  "source_commit": "b130b7dae36658c7ba67381fe06a62c7c7c03894"
 }

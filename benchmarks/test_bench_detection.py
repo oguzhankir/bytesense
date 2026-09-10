@@ -14,6 +14,7 @@ Accuracy:
 Run: ``scripts/run_all_benchmarks.sh`` or pytest with an explicit ``-k`` list of
 ``test_bench_*`` functions (not ``-k bench_``, which matches this file's name).
 """
+
 from __future__ import annotations
 
 import codecs
@@ -93,11 +94,7 @@ class TestAccuracy:
             for name, data, enc in _SYNTHETIC_DATASET
             if enc in ("utf_8", "utf_8_sig", "ascii")
         ],
-        ids=[
-            name
-            for name, _, enc in _SYNTHETIC_DATASET
-            if enc in ("utf_8", "utf_8_sig", "ascii")
-        ],
+        ids=[name for name, _, enc in _SYNTHETIC_DATASET if enc in ("utf_8", "utf_8_sig", "ascii")],
     )
     def test_bytesense_utf8_accuracy(self, name: str, data: bytes, expected: str) -> None:
         from bytesense import from_bytes
@@ -123,7 +120,9 @@ class TestAccuracy:
             f"Why: {result.why}"
         )
 
-    @pytest.mark.skipif(len(_CN_OFFICIAL_DATASET) == 0, reason="Run scripts/fetch_cn_benchmark_samples.py")
+    @pytest.mark.skipif(
+        len(_CN_OFFICIAL_DATASET) == 0, reason="Run scripts/fetch_cn_benchmark_samples.py"
+    )
     def test_bytesense_cn_official_functional_minimum(self) -> None:
         """
         charset-normalizer's official data/ files: require same decoded Unicode as reference
@@ -140,9 +139,7 @@ class TestAccuracy:
             else:
                 bad.append(f"{name}: got {result.encoding!r}, expected decode {exp!r}")
         n = len(_CN_OFFICIAL_DATASET)
-        assert ok == n, (
-            f"CN corpus functional decode mismatch: {ok}/{n}.\n" + "\n".join(bad[:12])
-        )
+        assert ok == n, f"CN corpus functional decode mismatch: {ok}/{n}.\n" + "\n".join(bad[:12])
 
     def test_bytesense_overall_accuracy(self) -> None:
         """Synthetic corpus: strict codec match ≥ 95%."""
@@ -214,7 +211,7 @@ _FAST_PATH_NAMES = {
     "utf8_chinese",
     "utf8_portuguese",
     "utf8_korean",
-    "large_utf8_1mb",
+    "large_utf8_1mib",
 }
 
 
@@ -230,7 +227,11 @@ def _get_all_samples() -> List[Tuple[str, bytes]]:
     return [(n, d) for n, d, _ in DATASET]
 
 
-@pytest.mark.parametrize("name,data", _get_samples(_FAST_PATH_NAMES), ids=list(_FAST_PATH_NAMES))
+@pytest.mark.parametrize(
+    "name,data",
+    _get_samples(_FAST_PATH_NAMES),
+    ids=[name for name, _ in _get_samples(_FAST_PATH_NAMES)],
+)
 def test_bench_bytesense_fast_path(benchmark: object, name: str, data: bytes) -> None:
     """Speed: bytesense on UTF-8 / ASCII / BOM fast-path inputs."""
     from bytesense import from_bytes
@@ -239,7 +240,11 @@ def test_bench_bytesense_fast_path(benchmark: object, name: str, data: bytes) ->
     assert result.encoding is not None
 
 
-@pytest.mark.parametrize("name,data", _get_samples(_FAST_PATH_NAMES), ids=list(_FAST_PATH_NAMES))
+@pytest.mark.parametrize(
+    "name,data",
+    _get_samples(_FAST_PATH_NAMES),
+    ids=[name for name, _ in _get_samples(_FAST_PATH_NAMES)],
+)
 def test_bench_cn_fast_path(benchmark: object, name: str, data: bytes) -> None:
     """Speed: charset-normalizer on the same fast-path inputs."""
     cn = pytest.importorskip("charset_normalizer")

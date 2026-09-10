@@ -18,6 +18,7 @@ Supports:
   - Detection-guided repair (auto-detect which transformation was applied)
 
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -127,6 +128,14 @@ def repair(
         else:
             print(result.original)   # unchanged
     """
+    if not isinstance(text, str):
+        raise TypeError("text must be str")
+    if (
+        isinstance(max_iterations, bool)
+        or not isinstance(max_iterations, int)
+        or not 1 <= max_iterations <= 2
+    ):
+        raise ValueError("max_iterations must be 1 or 2")
     if not text:
         return RepairResult(
             original=text,
@@ -173,14 +182,18 @@ def repair(
         best_iters = 1
 
     # Double-step repair (only if single-step improved things)
-    if max_iterations >= 2 and best_iters == 1 and best_mess > 0.05:
+    if (
+        max_iterations >= 2
+        and best_iters == 1
+        and (best_mess > 0.05 or _likely_utf8_mojibake(best_text))
+    ):
         opts2: list[tuple[tuple[str, str], str, float, int]] = []
         for i, (re_encode2, decode_as2) in enumerate(effective_chains):
             candidate2 = _try_chain(best_text, re_encode2, decode_as2)
             if candidate2 is None or candidate2 == best_text:
                 continue
             candidate2_mess = mess_ratio(candidate2)
-            strong_improvement = (original_mess - candidate2_mess) >= _MIN_IMPROVEMENT
+            strong_improvement = (best_mess - candidate2_mess) >= _MIN_IMPROVEMENT
             tie_utf8_mojibake = (
                 _likely_utf8_mojibake(best_text)
                 and (re_encode2, decode_as2) in _TIE_BREAK_CHAINS
@@ -237,14 +250,12 @@ def repair_bytes(
         from .api import from_bytes as _fb
 
         r = _fb(data)
-        enc = r.encoding or "utf_8"
+        if r.encoding is None:
+            raise UnicodeError("encoding is unknown; supply an explicit encoding")
+        enc = r.encoding
     else:
         enc = encoding
-
-    try:
-        text = data.decode(enc, errors="replace")
-    except LookupError:
-        text = data.decode("utf_8", errors="replace")
+    text = data.decode(enc, errors="strict")
 
     return repair(text, max_iterations=max_iterations, chains=chains)
 

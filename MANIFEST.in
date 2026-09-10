@@ -1,0 +1,8 @@
+include LICENSE README.md CHANGELOG.md
+recursive-include rust *.toml *.lock *.rs
+recursive-include src/bytesense *.py py.typed
+prune rust/target
+
+include CONTRIBUTING.md CODE_OF_CONDUCT.md
+recursive-include scripts *.py *.sh
+recursive-include benchmarks *.py cn_official_manifest.json

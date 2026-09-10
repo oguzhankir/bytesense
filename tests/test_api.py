@@ -44,9 +44,7 @@ class TestFromBytes:
         assert r.bom_detected is True
 
     def test_utf8_english(self) -> None:
-        data = (
-            b"The quick brown fox jumps over the lazy dog. Sphinx of black quartz."
-        )
+        data = b"The quick brown fox jumps over the lazy dog. Sphinx of black quartz."
         r = from_bytes(data)
         assert r.encoding in ("utf_8", "ascii")
         assert r.confidence >= 0.9
@@ -72,10 +70,9 @@ class TestFromBytes:
         assert hasattr(r, "why")
         assert hasattr(r, "byte_count")
 
-    def test_confidence_interval_valid(self) -> None:
+    def test_confidence_interval_is_not_fabricated(self) -> None:
         r = from_bytes(b"hello world testing encoding detection")
-        lo, hi = r.confidence_interval
-        assert 0.0 <= lo <= r.confidence <= hi <= 1.0
+        assert r.confidence_interval is None
 
     def test_to_dict(self) -> None:
         r = from_bytes(b"hello world")

@@ -4,6 +4,7 @@ Candidate encoding selector.
 Reduces ~99 possible encodings to a short list before decode+mess,
 using only byte-level evidence.
 """
+
 from __future__ import annotations
 
 import array
@@ -26,12 +27,7 @@ def _looks_like_iso2022_bytes(data: bytes) -> bool:
     """7-bit ISO-2022 uses ESC $ / ESC ( sequences — not plain ASCII text."""
     if b"\x1b" not in data:
         return False
-    return (
-        b"\x1b\x24" in data
-        or b"\x1b\x28" in data
-        or b"\x1b\x29" in data
-        or b"\x1b\x2e" in data
-    )
+    return b"\x1b\x24" in data or b"\x1b\x28" in data or b"\x1b\x29" in data or b"\x1b\x2e" in data
 
 
 class CandidateSelector:
@@ -66,10 +62,7 @@ class CandidateSelector:
             if n == 0:
                 self._ascii_only = True
             else:
-                no_high_byte = all(self.hist[i] == 0 for i in range(0x80, 0x100))
-                # UTF-16 (even ASCII text) uses many 0x00 bytes — not "pure ASCII" bytes.
-                nbr = null_byte_ratio(self.hist, n)
-                self._ascii_only = no_high_byte and nbr < 0.12
+                self._ascii_only = self.data.isascii() and b"\x00" not in self.data
         return self._ascii_only
 
     def is_utf8_valid(self) -> bool:

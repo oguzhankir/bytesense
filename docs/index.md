@@ -1,12 +1,18 @@
 # bytesense
 
-**Charset detection** that stays fast, honest, and **dependency-free** at runtime—with an explainable `why` on every result and **optional Rust** acceleration (`pip install "bytesense[fast]"`).
+**Detect the encoding. Validate every byte. Keep your data intact.**
 
-## Where to go next
+bytesense detects text encodings with zero runtime dependencies and optional Rust acceleration. Every returned encoding strictly decodes all supplied bytes. File and stream APIs keep memory bounded by spooling larger inputs to a temporary file.
 
-- **[Quick start](quickstart.md)** — install and your first `from_bytes` call
-- **[Examples](examples.md)** — runnable scripts: streaming, repair, hints, multi-encoding
-- **[API reference](api.md)** — main functions and result types
-- **[Benchmarks](benchmarks.md)** — how to reproduce accuracy and speed tables
+```python
+from bytesense import from_bytes
 
-The project README on GitHub has the full marketing copy, comparison tables, and CLI usage: **[github.com/oguzhankir/bytesense](https://github.com/oguzhankir/bytesense)**.
+raw = "café 世界".encode()
+result = from_bytes(raw)
+assert result.encoding == "utf_8"
+assert result.complete and result.bytes_validated == len(raw)
+```
+
+Start with the [quick start](quickstart.md), explore the [API](api.md), or review [measured accuracy and performance](benchmarks.md).
+
+Encoding detection is inference. Full decode validation rules out an invalid codec; it cannot disambiguate every legacy encoding. Confidence is an evidence score, not a calibrated probability.

@@ -4,6 +4,7 @@ Encoding hint extraction from HTTP headers and HTML/XML documents.
 Used internally by StreamDetector, but also available as a public API
 for callers who already have the raw content and headers.
 """
+
 from __future__ import annotations
 
 import codecs
@@ -11,17 +12,13 @@ import re
 from typing import Optional
 
 _XML_DECL_RE = re.compile(rb'<\?xml[^>]*encoding=["\']([^"\']+)["\']', re.IGNORECASE)
-_HTML_META_RE = re.compile(
-    rb'<meta[^>]+charset\s*=\s*["\']?\s*([a-zA-Z0-9_\-]+)', re.IGNORECASE
-)
+_HTML_META_RE = re.compile(rb'<meta[^>]+charset\s*=\s*["\']?\s*([a-zA-Z0-9_\-]+)', re.IGNORECASE)
 _HTTP_EQUIV_RE = re.compile(
     rb'<meta[^>]+http-equiv\s*=\s*["\']?content-type["\']?[^>]*'
     rb'content\s*=\s*["\']?[^"\']*charset=([a-zA-Z0-9_\-]+)',
     re.IGNORECASE,
 )
-_HTTP_HEADER_RE = re.compile(
-    r'charset\s*=\s*["\']?\s*([a-zA-Z0-9_\-]+)', re.IGNORECASE
-)
+_HTTP_HEADER_RE = re.compile(r'charset\s*=\s*["\']?\s*([a-zA-Z0-9_\-]+)', re.IGNORECASE)
 
 
 def _normalise(enc_str: str) -> Optional[str]:
@@ -46,7 +43,7 @@ def hint_from_http_headers(headers: dict[str, str]) -> Optional[str]:
         enc = hint_from_http_headers({"Content-Type": "text/html; charset=utf-8"})
         # → "utf_8"
     """
-    ct = headers.get("Content-Type", headers.get("content-type", ""))
+    ct = next((value for name, value in headers.items() if name.lower() == "content-type"), "")
     m = _HTTP_HEADER_RE.search(ct)
     if m:
         return _normalise(m.group(1))
