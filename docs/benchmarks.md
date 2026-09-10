@@ -10,6 +10,7 @@ Split by `int(SHA256(reference Unicode)[:8], 16) % 3`: zero is development (1,05
 
 | Detector | Exact Unicode matches | Accuracy |
 |---|---:|---:|
+| bytesense 1.1.0 | 1907 / 2078 | 91.77% |
 | bytesense 1.0.0 | 1906 / 2078 | 91.72% |
 | bytesense 0.1.2 | 883 / 2078 | 42.49% |
 | chardet 7.6.0 | 2060 / 2078 | 99.13% |
@@ -20,23 +21,43 @@ Bytesense exceeds charset-normalizer on this corpus. Chardet remains more accura
 
 The corpus-level elapsed times are diagnostic single passes, not latency benchmarks. Use the rotating-input measurements below for latency.
 
+The v1.1 model weights are unchanged. Runtime changes were selected on development data and contract regressions, not by tuning on this holdout. Native and Python implementations selected identical encodings for all 2,078 files. The net gain here is **one file**, not evidence of a large general-accuracy improvement.
+
+## New transfer check
+
+The [UDHR in XML repository](https://github.com/unicode-org/udhr/tree/588b3f4b2d0467aff54842a4b926551b69d5a66a) is pinned at `588b3f4b2d0467aff54842a4b926551b69d5a66a`. The script fixes 28 language documents and generates 64-character, 512-character and full-document variants in UTF-8, BOM-less UTF-16 and a declared set of language-relevant legacy codecs.
+
+Fixture preparation applies NFC, collapses whitespace, and maps six typographic quote/dash characters to ASCII. Encoding is strict: **432 cases** round-trip exactly; **27 unrepresentable combinations** are explicitly recorded as exclusions. The detector must reproduce the complete prepared reference Unicode. No source passages are included in reports or package artifacts.
+
+| Detector | All cases | Legacy cases | Unicode cases |
+|---|---:|---:|---:|
+| bytesense 1.1.0 | 394 / 432 | 146 / 180 | 248 / 252 |
+| bytesense 1.0.0 | 374 / 432 | 142 / 180 | 232 / 252 |
+| chardet 7.6.0 | 422 / 432 | 170 / 180 | 252 / 252 |
+| charset-normalizer 3.5.1 | 381 / 432 | 129 / 180 | 252 / 252 |
+| chardetng-py 0.3.5 | 213 / 432 | 129 / 180 | 84 / 252 |
+
+This set was not used for model training or runtime parameter selection. It is a **transfer check, not a representative benchmark of all applications**: the files are correlated re-encodings and length variants of translations of one document. Chardetng's Unicode count reflects its browser-encoding scope, not support for BOM-less UTF-16. The corpus is neither fully neutral nor a source of independent statistical trials.
+
+V1.1 gains 20 exact recoveries over v1.0 on this check. Chardet remains more accurate; bytesense still has Unicode and legacy errors. Do not claim universal superiority from either table.
+
 ## Latency
 
 Linux x86-64, CPython 3.12.14, bytesense native scoring. Package versions match the accuracy table. Each workload has 32 rotating payloads, two warm-up calls and 64 timed calls. Models/modules are warm; these are **not cold-start measurements**. Every detector correctly decoded all 64 payloads in each reported workload.
 
 Default API median latency:
 
-| Workload | bytesense | chardet | charset-normalizer | chardetng-py |
-|---|---:|---:|---:|---:|
-| ascii_1mib | 0.159 ms | 0.688 ms | 0.118 ms | 6.764 ms |
-| utf8_1mib | 1.234 ms | 0.804 ms | 1.497 ms | 35.680 ms |
-| utf8_8kib | 0.034 ms | 0.182 ms | 0.225 ms | 0.400 ms |
-| turkish_cp1254_2100b | 4.479 ms | 0.832 ms | 1.670 ms | 0.187 ms |
-| japanese_eucjp_4kib | 10.474 ms | 0.970 ms | 0.861 ms | 0.565 ms |
+| Workload | bytesense 1.1 | bytesense 1.0 | chardet | charset-normalizer | chardetng-py |
+|---|---:|---:|---:|---:|---:|
+| ascii_1mib | 0.160 ms | 0.157 ms | 0.706 ms | 0.114 ms | 6.860 ms |
+| utf8_1mib | 1.267 ms | 1.239 ms | 0.856 ms | 1.660 ms | 35.617 ms |
+| utf8_8kib | 0.035 ms | 0.034 ms | 0.196 ms | 0.243 ms | 0.427 ms |
+| turkish_cp1254_2100b | 1.564 ms | 4.424 ms | 0.854 ms | 1.706 ms | 0.187 ms |
+| japanese_eucjp_4kib | 3.885 ms | 10.869 ms | 1.033 ms | 0.872 ms | 0.585 ms |
 
 Bytesense's default API validates the complete input. Competitors' defaults can use different sample budgets (chardet 7.6.0 caps examination by default). The script also reports **detector + one strict application decode** for every library, including bytesense, under `full_validation`. That intentionally includes an additional decode for bytesense; keep the two modes separate.
 
-Legacy statistical scoring is still slower than these competitors on the Turkish and Japanese workloads. The new native scorer fuses Unicode classification and pair statistics, but considering many legacy candidates remains the main latency bottleneck. UTF-8 fast paths bypass the statistical model entirely. ASCII performance depends on size and detector; there is no universal speedup claim.
+V1.1 reduces the two measured legacy latencies by approximately **2.8× versus v1.0**. Atomic BMP property lookup, a fixed Latin-pair table, cached codec names and safe evidence-bound pruning reduce repeated work. The pair table costs 512 KiB of fixed native memory. Chardet and chardetng remain faster on both legacy workloads; charset-normalizer remains faster on Japanese. Considering many plausible candidates is still the main bottleneck. UTF-8 fast paths bypass the model, and their small timing differences are not presented as improvements or regressions. There is no universal speedup claim.
 
 Allocation peaks use `tracemalloc` and exclude native allocations. Stream spooling is verified separately with an 8 MB single-chunk regression: feeding a large chunk must not first duplicate that chunk in the in-memory spool.
 
@@ -52,9 +73,14 @@ python scripts/evaluate_corpus.py evaluate ../test-data --split holdout --output
 python scripts/benchmark_v1.py --output latency.json
 BYTESENSE_PURE_PYTHON=1 python scripts/evaluate_corpus.py evaluate ../test-data \
   --split holdout --engine bytesense --output pure-holdout.json
+git clone https://github.com/unicode-org/udhr ../udhr
+git -C ../udhr checkout 588b3f4b2d0467aff54842a4b926551b69d5a66a
+python scripts/evaluate_udhr.py ../udhr --output transfer.json
 ```
 
 Choose a pure or native build explicitly before comparing it. JSON records package versions, interpreter/platform, case hashes, reference encodings, predictions, decode validity and timing. Holdout evaluation does not update the model. Keep evaluation output outside the source package; do not silently reduce the corpus when files are missing.
+
+For a before/after comparison, install v1.0 and v1.1 in separate environments and run the same current script with `--engine bytesense`; the version is recorded in each report. The reported v1.0 baseline used a native wheel built from the v1.0 implementation now at commit `2df21ad1161b65ecf252f62078343516d47c7c02`.
 
 ## Model generation
 
@@ -78,3 +104,5 @@ pytest tests benchmarks/test_bench_detection.py benchmarks/test_hard_scenarios.p
 The 18 charset-normalizer reference files are pinned to commit `b130b7dae36658c7ba67381fe06a62c7c7c03894`, with per-file SHA-256 and size in `benchmarks/cn_official_manifest.json`. Missing or changed files fail collection. The 1 MiB fixture is actually 1,048,576 bytes and benchmark IDs follow the dataset order.
 
 The existing synthetic/curated suites are regression gates, not independent accuracy evidence. CI separately exercises installed pure and native artifacts, strict full-input validation, chunk boundaries, overflow-safe histograms, Unicode parity, thread determinism and CLI outcomes. Timings are reports; a noisy speed assertion cannot hide a failed correctness gate.
+
+The CI evaluation job also fetches both exact corpus commits, evaluates installed packages, enforces the v1.1 accuracy floors and checks every held-out native/Python prediction. Its `evaluation-results` artifact contains the raw accuracy and latency JSON; failures do not silently remove input cases. These published sets are regression checks for subsequent work; freeze a new validation set before choosing new ranking/model parameters.

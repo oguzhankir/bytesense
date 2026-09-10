@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bytesense"
-version = "1.0.0"
+version = "1.1.0"
 description = "Encoding detection with full-input validation, bounded-memory streams, and optional Rust acceleration."
 readme = "README.md"
 license = { text = "MIT" }

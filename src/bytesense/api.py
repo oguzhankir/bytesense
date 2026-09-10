@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import codecs
 import re
+import unicodedata
 from dataclasses import replace
+from functools import lru_cache
 from os import PathLike
 from typing import Any, BinaryIO, List, Optional
 
@@ -14,7 +16,7 @@ from .constant import ALL_ENCODINGS
 from .fingerprint import detect_null_pattern
 from .hints import hint_from_content
 from .models import DetectionResult, EncodingAlternative
-from .scoring import text_quality
+from .scoring import quality_if_supported
 
 
 def _looks_like_iso2022(data: bytes) -> bool:
@@ -83,14 +85,15 @@ def _from_sample(
     cp_exclusion: Optional[List[str]] = None,
     language_threshold: float = 0.1,
     enable_fallback: bool = False,
+    alternatives_limit: int | None = 5,
 ) -> DetectionResult:
     """Score a bounded prefix. The caller must validate every final candidate."""
-    candidates = _CANDIDATES if cp_isolation is None else cp_isolation
+    candidates = _default_candidates() if cp_isolation is None else cp_isolation
     rows: list[tuple[str, float, float, str]] = []
     # Local only: codecs that produce identical Unicode share statistical work.
-    evidence: dict[str, tuple[float, float]] = {}
+    evidence: dict[str, tuple[float, float] | None] = {}
     for name in candidates:
-        encoding = _codec(name)
+        encoding = name if cp_isolation is None else _codec(name)
         if cp_exclusion and encoding in cp_exclusion:
             continue
         try:
@@ -100,8 +103,11 @@ def _from_sample(
         except UnicodeError:
             continue
         if decoded not in evidence:
-            evidence[decoded] = text_quality(decoded)
-        support, bad = evidence[decoded]
+            evidence[decoded] = quality_if_supported(decoded)
+        quality = evidence[decoded]
+        if quality is None:
+            continue
+        support, bad = quality
         if bad > threshold or support < 0.25:
             continue
         rows.append((encoding, support, bad, decoded))
@@ -116,8 +122,10 @@ def _from_sample(
     confidence = round(min(0.95, max(0.1, 0.5 * support + min(0.45, margin * 3))), 4)
     alts = [
         EncodingAlternative(enc, round(min(0.95, max(0.0, score * 0.5)), 4), "")
-        for enc, score, _, _ in rows[1:6]
+        for enc, score, _, _ in rows[1:]
     ]
+    if alternatives_limit is not None:
+        alts = alts[:alternatives_limit]
     return _make_result(
         encoding,
         bad,
@@ -160,6 +168,12 @@ def _codec(name: str) -> str:
     return "latin_1" if norm == "iso8859_1" else norm
 
 
+@lru_cache(maxsize=1)
+def _default_candidates() -> tuple[str, ...]:
+    """Normalize the fixed codec catalog once, without caching user codecs."""
+    return tuple(dict.fromkeys(_codec(name) for name in _CANDIDATES))
+
+
 def _filters(
     isolation: Optional[List[str]], exclusion: Optional[List[str]]
 ) -> tuple[Optional[List[str]], List[str]]:
@@ -184,7 +198,41 @@ def _binary(data: bytes) -> bool:
     sample = data[:4096]
     if not sample or detect_null_pattern(sample):
         return False
-    return len(_CONTROL_BYTES.findall(sample)) / len(sample) > 0.05
+    controls = len(_CONTROL_BYTES.findall(sample))
+    if _looks_like_iso2022(sample):
+        # Shift In/Out are syntax in designated ISO-2022 streams, not binary
+        # noise. Candidate decoding must still validate the complete input.
+        controls -= sample.count(b"\x0e") + sample.count(b"\x0f")
+    return controls / len(sample) > 0.05
+
+
+def _unicode_fallbacks(
+    data: bytes,
+    include: Optional[List[str]],
+    exclude: List[str],
+    sample_size: int = 4096,
+    threshold: float = 0.05,
+) -> list[str]:
+    """Recover text with NULs in both lanes before declaring it binary.
+
+    Sparse ASCII in CJK/Korean text and embedded U+xx00 characters can defeat
+    a simple zero-lane ratio. Linguistic evidence is only a nomination: callers
+    must still strictly validate each candidate over the complete input.
+    """
+    if len(data) < 8 or b"\x00" not in data[:512] or data.startswith(_BINARY_MAGIC):
+        return []
+    rows = []
+    for encoding in ("utf_16_le", "utf_16_be"):
+        if not _allowed(encoding, include, exclude):
+            continue
+        try:
+            decoded = codecs.getincrementaldecoder(encoding)().decode(data[:sample_size], final=False)
+        except UnicodeError:
+            continue
+        quality = quality_if_supported(decoded, minimum=0.5)
+        if quality is not None and quality[0] >= 0.5 and quality[1] <= min(0.05, threshold):
+            rows.append((encoding, quality[0]))
+    return [encoding for encoding, _ in sorted(rows, key=lambda row: row[1], reverse=True)]
 
 
 def _valid(data: bytes, encoding: str) -> bool:
@@ -256,7 +304,10 @@ def _transport_encoding(data: bytes) -> Optional[str]:
     if b"+" in data and re.search(rb"\+[A-Za-z0-9/]{3,}(?:-|[^A-Za-z0-9/]|$)", data):
         try:
             decoded = data.decode("utf_7")
-            if not decoded.isascii() and all(c.isprintable() or c in "\n\r\t" for c in decoded):
+            if not decoded.isascii() and all(
+                c.isprintable() or c.isspace() or unicodedata.category(c) == "Cf"
+                for c in decoded
+            ):
                 return "utf_7"
         except UnicodeError:
             pass
@@ -339,6 +390,19 @@ def from_bytes(
             else _result(None, size, "Below minimum confidence.")
         )
     if _binary(data):
+        for encoding in _unicode_fallbacks(data, include, exclude, sample_size, threshold):
+            if _valid(data, encoding):
+                return (
+                    _result(
+                        encoding,
+                        size,
+                        "UTF-16 linguistic evidence; complete input validated.",
+                        0.8,
+                        examined=min(size, sample_size),
+                    )
+                    if min_confidence <= 0.8
+                    else _result(None, size, "Below minimum confidence.")
+                )
         return _result(
             None,
             size,
@@ -386,6 +450,7 @@ def from_bytes(
         cp_exclusion=exclude,
         language_threshold=language_threshold,
         enable_fallback=False,
+        alternatives_limit=None,
     )
     ranked = ([r.encoding] if r.encoding else []) + [a.encoding for a in r.alternatives]
     for encoding in ranked:
@@ -409,7 +474,7 @@ def from_bytes(
                 status="ambiguous" if r.alternatives else "matched",
                 chaos=r.chaos if encoding == r.encoding else 0.0,
                 coherence=r.coherence if encoding == r.encoding else 0.0,
-                alternatives=[a for a in r.alternatives if a.encoding != encoding],
+                alternatives=[a for a in r.alternatives if a.encoding != encoding][:5],
                 language=r.language if include_language and encoding == r.encoding else "",
                 why=r.why + " Full input validated."
                 if encoding == r.encoding

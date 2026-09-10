@@ -61,6 +61,11 @@ jobs:
       - run: python -c "from bytesense._rust import is_rust_available; assert is_rust_available()"
       - run: python -m pytest tests -o pythonpath= -q
       - run: cargo test --manifest-path rust/Cargo.toml --locked
+      - name: Rust formatting and lint
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
+        run: |
+          cargo fmt --manifest-path rust/Cargo.toml --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked -- -D warnings
   quality:
     runs-on: ubuntu-latest
     env:
@@ -72,6 +77,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install '.[dev,docs]'
+      - run: python scripts/check_version.py
       - run: ruff check src tests benchmarks scripts setup.py
       - run: mypy src/bytesense
       - run: python -m pytest tests --cov=bytesense --cov-branch --cov-report=xml
@@ -82,5 +88,42 @@ jobs:
         with:
           name: coverage
           path: coverage.xml
+  evaluation:
+    name: Frozen accuracy and backend parity
+    runs-on: ubuntu-latest
+    env:
+      BYTESENSE_BUILD_RUST: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: python -m pip install . chardet==7.6.0 charset-normalizer==3.5.1 chardetng-py==0.3.5
+      - run: python -c "from bytesense._rust import is_rust_available; assert is_rust_available()"
+      - name: Fetch exact evaluation sources
+        run: |
+          git init corpus
+          git -C corpus fetch --depth 1 https://github.com/chardet/test-data b0c0d206913ba118ffea2f7d306883e7a4a76db7
+          git -C corpus checkout --detach FETCH_HEAD
+          git init udhr
+          git -C udhr fetch --depth 1 https://github.com/unicode-org/udhr 588b3f4b2d0467aff54842a4b926551b69d5a66a
+          git -C udhr checkout --detach FETCH_HEAD
+          mkdir reports
+      - name: Evaluate installed artifacts
+        run: |
+          python scripts/evaluate_corpus.py evaluate corpus --split holdout --output reports/holdout-native.json
+          BYTESENSE_PURE_PYTHON=1 python scripts/evaluate_corpus.py evaluate corpus --split holdout --engine bytesense --output reports/holdout-pure.json
+          python scripts/evaluate_udhr.py udhr --output reports/transfer.json
+          python scripts/benchmark_v1.py --output reports/latency.json
+          python scripts/check_evaluation.py reports
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-results
+          path: reports/*.json
   wheels:
     uses: ./.github/workflows/wheels.yml

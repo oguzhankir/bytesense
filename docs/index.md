@@ -2,7 +2,7 @@
 
 **Detect the encoding. Validate every byte. Keep your data intact.**
 
-bytesense detects text encodings with zero runtime dependencies and optional Rust acceleration. Every returned encoding strictly decodes all supplied bytes. File and stream APIs keep memory bounded by spooling larger inputs to a temporary file.
+bytesense detects text encodings with zero runtime dependencies and optional Rust acceleration. Final detection results validate the selected encoding against all supplied bytes. File and stream APIs bound their input spool by moving larger inputs to a temporary file; decoder buffers and model data are additional.
 
 ```python
 from bytesense import from_bytes

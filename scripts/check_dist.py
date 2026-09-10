@@ -20,6 +20,8 @@ for path in sorted(Path(sys.argv[1]).iterdir()):
             for required in (
                 "setup.py",
                 "scripts/evaluate_corpus.py",
+                "scripts/evaluate_udhr.py",
+                "scripts/check_evaluation.py",
                 "benchmarks/cn_official_manifest.json",
                 "rust/Cargo.toml",
                 "rust/Cargo.lock",

@@ -16,6 +16,7 @@ from .api import (
     _from_sample,
     _result,
     _transport_encoding,
+    _unicode_fallbacks,
     from_bytes,
 )
 from .fingerprint import detect_null_pattern
@@ -190,6 +191,22 @@ class StreamDetector:
                 examined=len(prefix),
             )
         if _binary(prefix):
+            for encoding in _unicode_fallbacks(
+                prefix, include, exclude, self._sample_size, self._options["threshold"]
+            ):
+                valid, _ = self._validate(encoding)
+                if valid:
+                    return (
+                        _result(
+                            encoding,
+                            n,
+                            "UTF-16 linguistic evidence; complete stream validated.",
+                            0.8,
+                            examined=len(prefix),
+                        )
+                        if minimum <= 0.8
+                        else _result(None, n, "Below minimum confidence.", examined=len(prefix))
+                    )
             return _result(
                 None,
                 n,
@@ -250,7 +267,12 @@ class StreamDetector:
         probe = bytes(self._late_sample) or prefix
         options = {key: self._options[key] for key in ("threshold", "language_threshold")}
         r = _from_sample(
-            probe, cp_isolation=include, cp_exclusion=exclude, enable_fallback=False, **options
+            probe,
+            cp_isolation=include,
+            cp_exclusion=exclude,
+            enable_fallback=False,
+            alternatives_limit=None,
+            **options,
         )
         candidates = ([r.encoding] if r.encoding else []) + [alt.encoding for alt in r.alternatives]
         hint = self._options.get("encoding_hint") or self._declared_hint
@@ -294,7 +316,7 @@ class StreamDetector:
                     status="ambiguous" if r.alternatives else "matched",
                     chaos=r.chaos if enc == r.encoding else 0.0,
                     coherence=r.coherence if enc == r.encoding else 0.0,
-                    alternatives=[a for a in r.alternatives if a.encoding != enc],
+                    alternatives=[a for a in r.alternatives if a.encoding != enc][:5],
                     language=r.language
                     if self._options.get("include_language") and enc == r.encoding
                     else "",

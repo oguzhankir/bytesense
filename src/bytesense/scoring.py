@@ -19,6 +19,8 @@ def _model() -> tuple[frozenset[str], dict[str, float], Any]:
         gzip.decompress(files("bytesense.data").joinpath("language.json.gz").read_bytes())
     )
     letters, pairs = frozenset(payload["letters"]), payload["pairs"]
+    if any(not 0.0 <= weight <= 1.0 for weight in pairs.values()):
+        raise ValueError("model pair support must be between zero and one")
     native = None
     if is_rust_available():
         from ._rust_core import NgramModel  # type: ignore[import-not-found]
@@ -40,7 +42,7 @@ def _prepare(text: str) -> tuple[str, float, float]:
             ord(c) >= 128
             and not c.isalpha()
             and not c.isspace()
-            and unicodedata.category(c)[0] not in "PN"
+            and unicodedata.category(c)[0] not in "PNM"
         )
     ) / len(text)
     lower = text.lower()
@@ -82,19 +84,41 @@ def _classify(chars: str) -> list[tuple[bool, bool, bool]]:
                 ord(c) >= 128
                 and not c.isalpha()
                 and not c.isspace()
-                and unicodedata.category(c)[0] not in "PN"
+                and unicodedata.category(c)[0] not in "PNM"
             ),
         )
         for c in chars
     ]
 
 
-def text_quality(text: str) -> tuple[float, float]:
-    """Return linguistic support and control-character ratio (neither is a probability)."""
+def _quality(text: str, minimum: float | None) -> tuple[float, float] | None:
+    # Canonically equivalent spellings must provide the same evidence. In
+    # particular, Vietnamese legacy text often stores combining tone marks.
+    # This only normalizes scoring input; returned text/bytes are never changed.
+    text = unicodedata.normalize("NFC", text)
     letters, pairs, native = _model()
     if native:
-        score, bad = native.quality(text, text.lower(), _classify)
+        result = native.quality(text, text.lower(), _classify, minimum)
+        if result is None:
+            return None
+        score, bad = result
     else:
         normalized, bad, symbols = _prepare(text)
+        # All model supports are in [0, 1]. This bound cannot prune an
+        # acceptable candidate, even before scoring its character pairs.
+        if minimum is not None and 1.0 - 5 * bad - 3 * symbols + 1e-9 < minimum:
+            return None
         score = _score_pure(normalized, bad, symbols, letters, pairs)
     return round(score, 10), bad
+
+
+def text_quality(text: str) -> tuple[float, float]:
+    """Return exact linguistic support and control ratio, not a probability."""
+    result = _quality(text, None)
+    assert result is not None
+    return result
+
+
+def quality_if_supported(text: str, minimum: float = 0.25) -> tuple[float, float] | None:
+    """Skip pair scoring only when an upper bound proves insufficient support."""
+    return _quality(text, minimum)

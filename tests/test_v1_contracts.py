@@ -274,3 +274,78 @@ def test_parallel_detection_is_deterministic() -> None:
     with ThreadPoolExecutor(max_workers=4) as pool:
         actual = list(pool.map(lambda i: from_bytes(corpus[i % 3]).to_dict(), range(24)))
     assert actual == [expected[i % 3] for i in range(24)]
+
+
+@pytest.mark.parametrize("text", ["Tiếng Việt", "Σίσυφος", "İstanbul", "café", "한글"])
+def test_canonically_equivalent_text_has_identical_evidence(text: str) -> None:
+    import unicodedata
+
+    from bytesense.scoring import text_quality
+
+    assert text_quality(unicodedata.normalize("NFC", text)) == text_quality(
+        unicodedata.normalize("NFD", text)
+    )
+
+
+def test_combining_marks_are_not_symbol_noise() -> None:
+    from bytesense.scoring import _classify, _prepare
+
+    marks = "\u0301\u0e31\u0e34\u0e48"
+    assert all(not symbol for _, _, symbol in _classify(marks))
+    _, bad, symbols = _prepare(marks)
+    assert bad == symbols == 0
+
+
+@given(st.text(max_size=512))
+@settings(max_examples=150, deadline=None)
+def test_candidate_bound_never_discards_sufficient_evidence(text: str) -> None:
+    from bytesense.scoring import quality_if_supported, text_quality
+
+    exact = text_quality(text)
+    candidate = quality_if_supported(text)
+    if exact[0] >= 0.25:
+        assert candidate == exact
+    else:
+        assert candidate is None or candidate == exact
+
+
+@pytest.mark.parametrize("streamed", [False, True])
+def test_full_validation_can_reach_beyond_six_sampled_candidates(monkeypatch, streamed: bool) -> None:
+    # The final byte is undefined in every candidate except cp1251. All seven
+    # candidates have equal statistical evidence in the bounded prefix.
+    candidates = ["cp1252", "cp1254", "cp1253", "cp1255", "cp1257", "cp1258", "cp1251"]
+    data = b"caf\xe9 " * 100 + b"\x81"
+    monkeypatch.setattr("bytesense.api.quality_if_supported", lambda _: (0.8, 0.0))
+    options = dict(cp_isolation=candidates, sample_size=64, enable_fallback=False)
+    result = detect_stream(iter([data]), **options) if streamed else from_bytes(data, **options)
+    assert result.encoding == "cp1251"
+    assert result.bytes_validated == len(data)
+    assert len(result.alternatives) <= 5
+
+
+@pytest.mark.parametrize("encoding", ["utf_16_le", "utf_16_be"])
+def test_unicode_text_with_zeros_in_both_lanes_is_not_binary(encoding: str) -> None:
+    text = "中文编码检测不应丢失任何字符。这是一段测试文本。 " * 100
+    data = text.encode(encoding)
+    for result in (from_bytes(data), detect_stream(iter([data]))):
+        assert result.encoding is not None
+        assert data.decode(result.encoding) == text
+        assert result.bytes_validated == len(data)
+    assert from_bytes(data, cp_isolation=["utf_8"]).encoding is None
+    assert from_bytes(data[:-1], cp_isolation=[encoding]).encoding is None
+
+
+def test_iso2022_shift_controls_are_not_binary_noise() -> None:
+    text = "한글 " * 100
+    data = text.encode("iso2022_kr")
+    assert (data.count(b"\x0e") + data.count(b"\x0f")) / len(data) > 0.05
+    result = from_bytes(data)
+    assert result.encoding is not None and data.decode(result.encoding) == text
+
+
+def test_utf7_preserves_unicode_spaces_and_format_characters() -> None:
+    text = "中文\u3000文本\u200d\u200b"
+    data = text.encode("utf_7")
+    result = from_bytes(data)
+    assert result.encoding == "utf_7"
+    assert data.decode(result.encoding) == text
