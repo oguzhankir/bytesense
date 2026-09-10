@@ -80,7 +80,6 @@ The CLI exits **0** when every input has an encoding, **1** for read failures or
 detection and full-snapshot validation before CSV/TSV imports. It adds import contracts,
 safe UTF-8 normalization, string-preserving pandas/Polars adapters, and a GitHub Action.
 Built by the same maintainer; an independent project, not affiliated with Sentry.
-The repository is currently private, so viewing it requires access.
 
 ## Measured accuracy and performance
 
