@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import codecs
 import platform
-import tracemalloc
 
 import pytest
 from hypothesis import given, settings
@@ -70,6 +69,8 @@ def test_native_error_offset_matches_python(data: bytes) -> None:
 @pytest.mark.skipif(platform.python_implementation() != "CPython", reason="CPython allocation probe")
 @pytest.mark.parametrize("native", [False, True])
 def test_utf8_validation_does_not_allocate_full_decoded_input(monkeypatch, native: bool) -> None:
+    import tracemalloc
+
     if native and not is_rust_available():
         pytest.skip("Native extension not compiled")
     if not native:
