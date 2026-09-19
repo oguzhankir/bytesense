@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, 'oguzhankir/**']
+    branches: [main, 'oguzhankir/**', 'feature/**']
   pull_request:
     branches: [main]
   workflow_dispatch:

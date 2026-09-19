@@ -87,7 +87,8 @@ The v1 engine replaces the previous collection of special-case ranking rules wit
 
 | Detector | Exact Unicode matches | Accuracy |
 |---|---:|---:|
-| **bytesense 1.1.0** | **1907 / 2078** | **91.77%** |
+| **bytesense 1.2.0** | **1907 / 2078** | **91.77%** |
+| bytesense 1.1.0 | 1907 / 2078 | 91.77% |
 | bytesense 1.0.0 | 1906 / 2078 | 91.72% |
 | bytesense 0.1.2 | 883 / 2078 | 42.49% |
 | chardet 7.6.0 | 2060 / 2078 | 99.13% |
@@ -96,9 +97,9 @@ The v1 engine replaces the previous collection of special-case ranking rules wit
 
 See [benchmarks and methodology](https://oguzhankir.github.io/bytesense/benchmarks/) for measured comparisons with chardet, charset-normalizer and chardetng, including the cases where another detector wins. Timing reports distinguish default behavior from an additional full-decode validation step.
 
-**New in 1.1:** faster legacy scoring, canonical-Unicode evidence, and deeper full-input validation. On a new 432-case transfer check built from 28 UDHR translations, exact recovery increased from **374 to 394 cases**; charset-normalizer recovered 381 and chardet 422. These are correlated variants of one translated document, not a universal accuracy ranking. Chardet remains more accurate on both reported corpora.
+**New in 1.2:** `from_bytes()` validates UTF-8 using native SIMD without allocating decoded Unicode; its pure-Python path uses 64 KiB blocks above 64 KiB. On the measured 1 MiB UTF-8 workload, native `from_bytes()` median latency decreased from **1.564 ms to 0.294 ms (5.3×)** versus 1.1, with every byte still validated. Peak temporary Python allocations decreased from about **6 MiB to 6 KiB**; this is not total process memory.
 
-The measured Turkish CP1254 and Japanese EUC-JP workloads run approximately **2.8× faster than bytesense 1.0** with the native backend. See the benchmark table for absolute timings and where competitors remain faster.
+The existing 2,078-file and 432-case transfer results are unchanged. This release improves UTF-8 validation cost, not general encoding accuracy; chardet remains more accurate on both corpora. See the [benchmark methodology](https://oguzhankir.github.io/bytesense/benchmarks/) for paired measurements, competitors, backend scope and reproduction commands.
 
 ## Upgrading from 0.x
 

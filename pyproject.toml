@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bytesense"
-version = "1.1.0"
+version = "1.2.0"
 description = "Encoding detection with full-input validation, bounded-memory streams, and optional Rust acceleration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -81,6 +81,9 @@ Repository  = "https://github.com/oguzhankir/bytesense"
 Issues      = "https://github.com/oguzhankir/bytesense/issues"
 Changelog     = "https://github.com/oguzhankir/bytesense/blob/main/CHANGELOG.md"
 Documentation = "https://oguzhankir.github.io/bytesense/"
+
+[tool.setuptools]
+license-files = ["LICENSE", "THIRD_PARTY_LICENSES"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

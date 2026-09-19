@@ -21,6 +21,8 @@ def samples() -> dict[str, list[bytes]]:
         "ascii_1mib": (b"The quick brown fox jumps over the lazy dog. ", 1_048_576, "ascii"),
         "utf8_1mib": ("Merhaba dünya! 日本語 Ελληνικά 🙂 ".encode(), 1_048_576, "utf_8"),
         "utf8_8kib": ("Café dünyası: 中文测试 🎉 ".encode(), 8192, "utf_8"),
+        "utf8_64kib": ("Merhaba dünya! 日本語 Ελληνικά 🙂 ".encode(), 65536, "utf_8"),
+        "utf8_8mib": ("Merhaba dünya! 日本語 Ελληνικά 🙂 ".encode(), 8_388_608, "utf_8"),
         "turkish_cp1254_2100b": (
             ("İstanbul'da çalışan mühendisler için doğru metin çözümleme. " * 35).encode("cp1254"),
             2100,
@@ -65,6 +67,8 @@ def main() -> None:
         "ascii_1mib": "ascii",
         "utf8_1mib": "utf_8",
         "utf8_8kib": "utf_8",
+        "utf8_64kib": "utf_8",
+        "utf8_8mib": "utf_8",
         "turkish_cp1254_2100b": "cp1254",
         "japanese_eucjp_4kib": "euc_jp",
     }

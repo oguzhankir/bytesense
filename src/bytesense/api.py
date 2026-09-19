@@ -10,6 +10,7 @@ from functools import lru_cache
 from os import PathLike
 from typing import Any, BinaryIO, List, Optional
 
+from ._rust import is_rust_available, rust_utf8_check
 from .candidate import CandidateSelector
 from .coherence import detect_language
 from .constant import ALL_ENCODINGS
@@ -236,8 +237,13 @@ def _unicode_fallbacks(
 
 
 def _valid(data: bytes, encoding: str) -> bool:
+    utf8 = encoding in ("utf_8", "utf_8_sig")
+    if utf8 and is_rust_available():
+        # A UTF-8 BOM changes decoded text, not strict byte validity. Native
+        # validation checks every byte without allocating decoded Unicode.
+        return rust_utf8_check(data)[0]
     try:
-        if len(data) <= 1_048_576:
+        if len(data) <= (65536 if utf8 else 1_048_576):
             data.decode(encoding, errors="strict")
         else:
             decoder = codecs.getincrementaldecoder(encoding)(errors="strict")
@@ -375,7 +381,8 @@ def from_bytes(
             )
         r = _result(bom, size, f"BOM declares {bom}; all bytes validated.", 1.0)
         return replace(r, bom_detected=True)
-    transport = _transport_encoding(data) if data.isascii() else None
+    ascii_data = data.isascii()
+    transport = _transport_encoding(data) if ascii_data else None
     if transport and _allowed(transport, include, exclude):
         if min_confidence <= 0.85:
             return _result(
@@ -412,7 +419,7 @@ def from_bytes(
         )
     shape = detect_null_pattern(data)
     if not shape and not _looks_like_iso2022(data):
-        if data.isascii() and _allowed("ascii", include, exclude):
+        if ascii_data and _allowed("ascii", include, exclude):
             return _result("ascii", size, "All bytes are valid ASCII text.", 1.0)
         if _allowed("utf_8", include, exclude) and _valid(data, "utf_8"):
             r = _result("utf_8", size, "All bytes validated as UTF-8.", 0.99)

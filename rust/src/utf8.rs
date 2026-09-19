@@ -1,6 +1,8 @@
 /// Returns (is_valid, confidence_0_to_1).
 pub fn utf8_check(data: &[u8]) -> (bool, f64) {
-    match std::str::from_utf8(data) {
+    // The compat validator preserves the first-error offset and early exit.
+    // x86 CPU features are detected at runtime; unsupported targets use scalar validation.
+    match simdutf8::compat::from_utf8(data) {
         Ok(_) => (true, 1.0),
         Err(e) => {
             let conf = if data.is_empty() {

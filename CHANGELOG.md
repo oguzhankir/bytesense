@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0
+
+### UTF-8 validation
+- Validate complete UTF-8 and UTF-8-SIG inputs in `from_bytes()` with SIMD in native builds, without allocating decoded Unicode. Pin `simdutf8` 0.1.5 and preserve strict rejection and first-error offsets with its compatibility validator.
+- Retain runtime x86 CPU dispatch and scalar fallbacks; no target-specific CPU flags or Python runtime dependencies are required.
+- Decode pure-Python UTF-8 inputs larger than 64 KiB in bounded blocks. Preserve the existing threshold for other codecs, including custom decoders.
+- Reuse the ASCII check within each detection call. Public results, scoring and stream behavior are unchanged.
+
+### Verification
+- Add strict-decoder parity, malformed-scalar, SIMD/block boundary, allocation and custom-codec regressions.
+- Extend rotating-input benchmarks with 64 KiB and 8 MiB UTF-8 workloads and isolated before/after comparisons.
+- Preserve existing corpus accuracy and native/Python predictions; include the native dependency's license in distributions.
+
+See the benchmark documentation for measured gains and their scope.
+
 ## 1.1.0
 
 ### Faster legacy detection

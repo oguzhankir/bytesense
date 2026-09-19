@@ -10,6 +10,7 @@ Split by `int(SHA256(reference Unicode)[:8], 16) % 3`: zero is development (1,05
 
 | Detector | Exact Unicode matches | Accuracy |
 |---|---:|---:|
+| bytesense 1.2.0 | 1907 / 2078 | 91.77% |
 | bytesense 1.1.0 | 1907 / 2078 | 91.77% |
 | bytesense 1.0.0 | 1906 / 2078 | 91.72% |
 | bytesense 0.1.2 | 883 / 2078 | 42.49% |
@@ -31,6 +32,7 @@ Fixture preparation applies NFC, collapses whitespace, and maps six typographic 
 
 | Detector | All cases | Legacy cases | Unicode cases |
 |---|---:|---:|---:|
+| bytesense 1.2.0 | 394 / 432 | 146 / 180 | 248 / 252 |
 | bytesense 1.1.0 | 394 / 432 | 146 / 180 | 248 / 252 |
 | bytesense 1.0.0 | 374 / 432 | 142 / 180 | 232 / 252 |
 | chardet 7.6.0 | 422 / 432 | 170 / 180 | 252 / 252 |
@@ -41,25 +43,39 @@ This set was not used for model training or runtime parameter selection. It is a
 
 V1.1 gains 20 exact recoveries over v1.0 on this check. Chardet remains more accurate; bytesense still has Unicode and legacy errors. Do not claim universal superiority from either table.
 
+V1.2 changes validation cost, not the statistical model or ranking. Every native/Python prediction on the 2,078-file holdout remains identical to v1.1, and the 432-case transfer results are unchanged.
+
 ## Latency
 
-Linux x86-64, CPython 3.12.14, bytesense native scoring. Package versions match the accuracy table. Each workload has 32 rotating payloads, two warm-up calls and 64 timed calls. Models/modules are warm; these are **not cold-start measurements**. Every detector correctly decoded all 64 payloads in each reported workload.
+Linux x86-64 (Intel Xeon Platinum 8370C), CPython 3.12.14, native bytesense. Competitor versions match the accuracy table. V1.1 and the v1.2 implementation run in separate persistent processes; 128 rounds use the same 32 rotating payloads, four warm-ups per workload, and seeded randomized engine order on each round. Timers exclude inter-process communication. These are warm measurements on one host, not cold-start or cross-platform guarantees. Every engine exactly decoded all 128 payloads in every workload/mode.
 
 Default API median latency:
 
-| Workload | bytesense 1.1 | bytesense 1.0 | chardet | charset-normalizer | chardetng-py |
+| Workload | bytesense 1.2 | bytesense 1.1 | chardet | charset-normalizer | chardetng-py |
 |---|---:|---:|---:|---:|---:|
-| ascii_1mib | 0.160 ms | 0.157 ms | 0.706 ms | 0.114 ms | 6.860 ms |
-| utf8_1mib | 1.267 ms | 1.239 ms | 0.856 ms | 1.660 ms | 35.617 ms |
-| utf8_8kib | 0.035 ms | 0.034 ms | 0.196 ms | 0.243 ms | 0.427 ms |
-| turkish_cp1254_2100b | 1.564 ms | 4.424 ms | 0.854 ms | 1.706 ms | 0.187 ms |
-| japanese_eucjp_4kib | 3.885 ms | 10.869 ms | 1.033 ms | 0.872 ms | 0.585 ms |
+| ascii_1mib | 0.239 ms | 0.414 ms | 1.275 ms | 0.281 ms | 9.019 ms |
+| utf8_8kib | 0.078 ms | 0.086 ms | 0.402 ms | 0.519 ms | 0.728 ms |
+| utf8_64kib | 0.092 ms | 0.179 ms | 0.768 ms | 0.601 ms | 4.024 ms |
+| utf8_1mib | 0.294 ms | 1.564 ms | 1.697 ms | 1.927 ms | 63.316 ms |
+| utf8_8mib | 2.329 ms | 11.886 ms | 1.793 ms | 94.523 ms | 508.226 ms |
+| turkish_cp1254_2100b | 2.731 ms | 2.891 ms | 1.972 ms | 3.259 ms | 0.360 ms |
+| japanese_eucjp_4kib | 6.366 ms | 6.216 ms | 2.182 ms | 1.806 ms | 1.023 ms |
 
-Bytesense's default API validates the complete input. Competitors' defaults can use different sample budgets (chardet 7.6.0 caps examination by default). The script also reports **detector + one strict application decode** for every library, including bytesense, under `full_validation`. That intentionally includes an additional decode for bytesense; keep the two modes separate.
+The measured 1 MiB and 8 MiB UTF-8 detection calls are **5.3× and 5.1× faster than v1.1**. Native `from_bytes(bytes)` validates UTF-8/UTF-8-SIG directly with pinned `simdutf8` 0.1.5: runtime AVX2/SSE4.2 dispatch on x86, target-supported NEON on ARM64, and scalar fallbacks. Its [compatibility validator](https://docs.rs/simdutf8/0.1.5/simdutf8/compat/fn.from_utf8.html) preserves strict rejection, early failure and first-error offsets. Other CPU architectures were not timed locally. Small-input gains are modest; legacy detection is essentially unchanged and competitors still win there.
 
-V1.1 reduces the two measured legacy latencies by approximately **2.8× versus v1.0**. Atomic BMP property lookup, a fixed Latin-pair table, cached codec names and safe evidence-bound pruning reduce repeated work. The pair table costs 512 KiB of fixed native memory. Chardet and chardetng remain faster on both legacy workloads; charset-normalizer remains faster on Japanese. Considering many plausible candidates is still the main bottleneck. UTF-8 fast paths bypass the model, and their small timing differences are not presented as improvements or regressions. There is no universal speedup claim.
+Bytesense validates every byte. Chardet 7.6.0 defaults to a 200,000-byte examination cap, so its lower default latency on the 8 MiB workload does not represent equivalent validation work. Charset-normalizer fully decodes UTF-8; its scoring sample budget does not limit that decoding. Chardetng is called with `allow_utf8=True` and consumes the full input.
 
-Allocation peaks use `tracemalloc` and exclude native allocations. Stream spooling is verified separately with an 8 MB single-chunk regression: feeding a large chunk must not first duplicate that chunk in the in-memory spool.
+The `full_validation` mode adds one strict application decode to **every** detector, including bytesense. For the 1 MiB UTF-8 workload:
+
+| Workflow | bytesense 1.2 | bytesense 1.1 | chardet | charset-normalizer | chardetng-py |
+|---|---:|---:|---:|---:|---:|
+| Detection + strict decode | 1.569 ms | 2.795 ms | 2.932 ms | 3.160 ms | 62.896 ms |
+
+This application workflow improves by **1.8×**, rather than the 5.3× detector-only gain. Keep these modes separate.
+
+On the 1 MiB UTF-8 detection call, peak traced Python allocations decrease from **6,291,602 to 5,988 bytes**. `tracemalloc` excludes native allocations and pre-existing input buffers; this is not RSS or total application memory. Decoding afterward allocates Unicode as usual, and `bytearray` inputs still incur the documented conversion to immutable bytes. The pure-Python UTF-8 path now uses 64 KiB decode blocks above 64 KiB; v1.1 already used blocks above 1 MiB. `from_path`, `from_fp` and stream finalization retain their existing incremental validation path.
+
+The paired comparator records package versions, backend availability, source/extension hashes, payload hashes, exact-decode counts, median/p95 latency and traced Python allocations. The single-environment benchmark remains available for CI reports. Timing is never a correctness gate.
 
 ## Reproduce
 
@@ -80,7 +96,16 @@ python scripts/evaluate_udhr.py ../udhr --output transfer.json
 
 Choose a pure or native build explicitly before comparing it. JSON records package versions, interpreter/platform, case hashes, reference encodings, predictions, decode validity and timing. Holdout evaluation does not update the model. Keep evaluation output outside the source package; do not silently reduce the corpus when files are missing.
 
-For a before/after comparison, install v1.0 and v1.1 in separate environments and run the same current script with `--engine bytesense`; the version is recorded in each report. The reported v1.0 baseline used a native wheel built from the v1.0 implementation now at commit `2df21ad1161b65ecf252f62078343516d47c7c02`.
+For the paired comparison, install v1.1 and this checkout in separate environments with the same Python version and native backend. The v1.1 baseline is commit `5c6677096b4ce571509992980e28148b0a702fd3`; comparison dependencies belong in the candidate environment. Then run:
+
+```bash
+python scripts/benchmark_compare.py \
+  --baseline-python /path/to/v1.1/bin/python \
+  --candidate-python /path/to/v1.2/bin/python \
+  --rounds 128 --output paired-latency.json
+```
+
+Check the recorded backend flags before comparing native and pure builds. The UTF-8 change also passed strict-decoder property tests, SIMD/block-boundary regressions, and an independent exhaustive/structured check of 1,272,596 byte inputs with identical validity and first-error offsets. That checks implementation equivalence, not language-detection accuracy.
 
 ## Model generation
 
