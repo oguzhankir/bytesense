@@ -13,12 +13,14 @@ for path in sorted(Path(sys.argv[1]).iterdir()):
                 assert not any(n.endswith((".so", ".pyd", ".dll")) for n in names)
             assert "bytesense/py.typed" in names
             assert "bytesense/data/language.json.gz" in names
+            assert any(n.endswith("/THIRD_PARTY_LICENSES") for n in names)
             assert not any("/target/" in n for n in names)
     elif path.name.endswith(".tar.gz"):
         with tarfile.open(path) as archive:
             names = archive.getnames()
             for required in (
                 "setup.py",
+                "THIRD_PARTY_LICENSES",
                 "scripts/evaluate_corpus.py",
                 "scripts/evaluate_udhr.py",
                 "scripts/check_evaluation.py",
